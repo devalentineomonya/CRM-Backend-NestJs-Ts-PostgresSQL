@@ -2,41 +2,50 @@ import {
   Controller,
   Get,
   Post,
-  Body,
-  Patch,
-  Param,
+  Put,
   Delete,
+  Param,
+  Query,
+  Body,
 } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
+import { Ticket } from './entities/ticket.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { TicketFilterDto } from './dto/filter-ticket.dto';
 
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
 
-  @Post()
-  create(@Body() createTicketDto: CreateTicketDto) {
-    return this.ticketsService.create(createTicketDto);
+  @Post(':userId')
+  create(
+    @Body() createTicketDto: CreateTicketDto,
+    @Param('userId') userId: string,
+  ): Promise<Ticket> {
+    return this.ticketsService.create(userId, createTicketDto);
   }
 
   @Get()
-  findAll() {
-    return this.ticketsService.findAll();
+  findAll(@Query() filter: TicketFilterDto) {
+    return this.ticketsService.findAll(filter);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ticketsService.findOne(+id);
+  findOne(@Param('id') id: string): Promise<Ticket> {
+    return this.ticketsService.findOne(id);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTicketDto: UpdateTicketDto) {
-    return this.ticketsService.update(+id, updateTicketDto);
+  @Put(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateTicketDto: UpdateTicketDto,
+  ): Promise<Ticket> {
+    return this.ticketsService.update(id, updateTicketDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.ticketsService.remove(+id);
+  remove(@Param('id') id: string): Promise<void> {
+    return this.ticketsService.remove(id);
   }
 }

@@ -1,26 +1,86 @@
-import { Injectable } from '@nestjs/common';
-import { CreateQuoteDto } from './dto/create-quote.dto';
-import { UpdateQuoteDto } from './dto/update-quote.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, ILike, FindOptionsWhere } from 'typeorm';
+import { Quote } from './entities/quote.entity';
+import { CreateQuote } from './dto/create-quote.dto';
+import { UpdateQuote } from './dto/update-quote.dto';
+import { QuoteFilter } from './dto/filter-quote.dto';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
-export class QuotesService {
-  create(createQuoteDto: CreateQuoteDto) {
-    return 'This action adds a new quote';
+export class QuoteService {
+  constructor(
+    @InjectRepository(Quote)
+    private quoteRepository: Repository<Quote>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+  ) {}
+
+  async create(userId: string, createQuote: CreateQuote): Promise<Quote> {
+    const user = await this.userRepository.findOne({
+      where: { user_id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const quote = this.quoteRepository.create({
+      ...createQuote,
+      user,
+    });
+
+    return this.quoteRepository.save(quote);
   }
 
-  findAll() {
-    return `This action returns all quotes`;
+  async findAll(
+    filter: QuoteFilter,
+  ): Promise<{ success: boolean; data: Quote[]; count: number }> {
+    const { search, status, user_id, limit, page, sort_by, sort_order } =
+      filter;
+    const skip = ((page ?? 1) - 1) * (limit ?? 10);
+
+    const where: FindOptionsWhere<Quote> | FindOptionsWhere<Quote>[] = {};
+
+    if (status) where.status = status;
+    if (user_id) where.user = { user_id };
+
+    if (search) {
+      where.quote_details = ILike(`%${search}%`);
+      where.quote_type = ILike(`%${search}%`);
+    }
+
+    const [data, count] = await this.quoteRepository.findAndCount({
+      where,
+      relations: ['user'],
+      order: sort_by ? { [sort_by]: sort_order } : undefined,
+      skip,
+      take: limit,
+    });
+
+    return { success: true, data, count };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} quote`;
+  async findOne(id: string): Promise<Quote> {
+    const quote = await this.quoteRepository.findOne({
+      where: { quote_id: id },
+      relations: ['user'],
+    });
+
+    if (!quote) {
+      throw new NotFoundException(`Quote with ID ${id} not found`);
+    }
+    return quote;
   }
 
-  update(id: number, updateQuoteDto: UpdateQuoteDto) {
-    return `This action updates a #${id} quote`;
+  async update(id: string, updateQuote: UpdateQuote): Promise<Quote> {
+    const quote = await this.findOne(id);
+    const updated = this.quoteRepository.merge(quote, updateQuote);
+    return this.quoteRepository.save(updated);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} quote`;
+  async remove(id: string): Promise<void> {
+    const quote = await this.findOne(id);
+    await this.quoteRepository.remove(quote);
   }
 }

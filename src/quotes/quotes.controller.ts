@@ -2,41 +2,50 @@ import {
   Controller,
   Get,
   Post,
-  Body,
-  Patch,
-  Param,
+  Put,
   Delete,
+  Param,
+  Query,
+  Body,
 } from '@nestjs/common';
-import { QuotesService } from './quotes.service';
-import { CreateQuoteDto } from './dto/create-quote.dto';
-import { UpdateQuoteDto } from './dto/update-quote.dto';
+import { QuoteService } from './quotes.service';
+import { Quote } from './entities/quote.entity';
+import { CreateQuote } from './dto/create-quote.dto';
+import { UpdateQuote } from './dto/update-quote.dto';
+import { QuoteFilter } from './dto/filter-quote.dto';
 
 @Controller('quotes')
 export class QuotesController {
-  constructor(private readonly quotesService: QuotesService) {}
+  constructor(private readonly quotesService: QuoteService) {}
 
-  @Post()
-  create(@Body() createQuoteDto: CreateQuoteDto) {
-    return this.quotesService.create(createQuoteDto);
+  @Post(':userId')
+  create(
+    @Body() createQuote: CreateQuote,
+    @Param('userId') userId: string,
+  ): Promise<Quote> {
+    return this.quotesService.create(userId, createQuote);
   }
 
   @Get()
-  findAll() {
-    return this.quotesService.findAll();
+  findAll(@Query() filter: QuoteFilter) {
+    return this.quotesService.findAll(filter);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.quotesService.findOne(+id);
+  findOne(@Param('id') id: string): Promise<Quote> {
+    return this.quotesService.findOne(id);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateQuoteDto: UpdateQuoteDto) {
-    return this.quotesService.update(+id, updateQuoteDto);
+  @Put(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateQuote: UpdateQuote,
+  ): Promise<Quote> {
+    return this.quotesService.update(id, updateQuote);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.quotesService.remove(+id);
+  remove(@Param('id') id: string): Promise<void> {
+    return this.quotesService.remove(id);
   }
 }
