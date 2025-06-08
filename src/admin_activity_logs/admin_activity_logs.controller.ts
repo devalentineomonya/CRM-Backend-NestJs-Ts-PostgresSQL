@@ -1,47 +1,48 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, Param } from '@nestjs/common';
 import { AdminActivityLogsService } from './admin_activity_logs.service';
 import { CreateAdminActivityLogDto } from './dto/create-admin_activity_log.dto';
-import { UpdateAdminActivityLogDto } from './dto/update-admin_activity_log.dto';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Admin Activity Logs')
 @Controller('admin-activity-logs')
 export class AdminActivityLogsController {
-  constructor(
-    private readonly adminActivityLogsService: AdminActivityLogsService,
-  ) {}
+  constructor(private readonly logsService: AdminActivityLogsService) {}
 
+  @ApiBearerAuth()
   @Post()
+  @ApiOperation({ summary: 'Record an admin activity' })
   create(@Body() createAdminActivityLogDto: CreateAdminActivityLogDto) {
-    return this.adminActivityLogsService.create(createAdminActivityLogDto);
+    const mockAdmin = {
+      admin_id: 1,
+      username: 'admin_user',
+      email: 'admin@example.com',
+      // Other required fields...
+    };
+
+    return this.logsService.createLog(
+      mockAdmin as any,
+      createAdminActivityLogDto,
+    );
   }
 
-  @Get()
-  findAll() {
-    return this.adminActivityLogsService.findAll();
+  @ApiBearerAuth()
+  @Get('admin/:adminId')
+  @ApiOperation({ summary: 'Get logs for a specific admin' })
+  getAdminLogs(@Param('adminId') adminId: string) {
+    return this.logsService.getAdminLogs(adminId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.adminActivityLogsService.findOne(+id);
+  @ApiBearerAuth()
+  @Get('recent')
+  @ApiOperation({ summary: 'Get recent admin activities' })
+  getRecentLogs() {
+    return this.logsService.getRecentLogs();
   }
 
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateAdminActivityLogDto: UpdateAdminActivityLogDto,
-  ) {
-    return this.adminActivityLogsService.update(+id, updateAdminActivityLogDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.adminActivityLogsService.remove(+id);
+  @ApiBearerAuth()
+  @Get('action/:actionType')
+  @ApiOperation({ summary: 'Get logs by action type' })
+  getLogsByActionType(@Param('actionType') actionType: string) {
+    return this.logsService.getLogsByActionType(actionType);
   }
 }

@@ -9,6 +9,7 @@ import {
   OneToMany,
   Index,
   BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 
 import { Ticket } from 'src/tickets/entities/ticket.entity';
@@ -17,6 +18,7 @@ import * as bcrypt from 'bcrypt';
 
 @Entity({ name: 'users' })
 export class User {
+  @BeforeUpdate()
   @BeforeInsert()
   async hashPassword() {
     if (this.password) {
@@ -52,8 +54,14 @@ export class User {
   @Column({ type: 'enum', enum: ['active', 'inactive'], default: 'active' })
   status: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'free' })
+  @Column({ type: 'varchar', enum: ['free', 'premium'], default: 'free' })
   account_type: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  last_login: Date;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  hashed_refresh_token: string | null;
 
   @OneToOne(() => Profile, (profile) => profile.user)
   profile: Profile;

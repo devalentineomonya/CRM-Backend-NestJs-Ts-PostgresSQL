@@ -1,26 +1,57 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AdminActivityLog } from './entities/admin_activity_log.entity';
+import { Admin } from '../admins/entities/admin.entity';
 import { CreateAdminActivityLogDto } from './dto/create-admin_activity_log.dto';
-import { UpdateAdminActivityLogDto } from './dto/update-admin_activity_log.dto';
 
 @Injectable()
 export class AdminActivityLogsService {
-  create(createAdminActivityLogDto: CreateAdminActivityLogDto) {
-    return 'This action adds a new adminActivityLog';
+  constructor(
+    @InjectRepository(AdminActivityLog)
+    private readonly logRepository: Repository<AdminActivityLog>,
+  ) {}
+
+  async createLog(
+    admin: Admin,
+    createAdminActivityLogDto: CreateAdminActivityLogDto,
+  ): Promise<AdminActivityLog> {
+    const log = this.logRepository.create({
+      ...createAdminActivityLogDto,
+      admin,
+    });
+    return this.logRepository.save(log);
   }
 
-  findAll() {
-    return `This action returns all adminActivityLogs`;
+  async getAdminLogs(adminId: string): Promise<AdminActivityLog[]> {
+    return this.logRepository.find({
+      where: { admin: { admin_id: adminId } },
+      order: { action_time: 'DESC' },
+      take: 100,
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} adminActivityLog`;
+  async getRecentLogs(days = 7): Promise<AdminActivityLog[]> {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+
+    return this.logRepository.find({
+      where: { action_time: new Date(date) },
+      order: { action_time: 'DESC' },
+      relations: ['admin'],
+      take: 100,
+    });
   }
 
-  update(id: number, updateAdminActivityLogDto: UpdateAdminActivityLogDto) {
-    return `This action updates a #${id} adminActivityLog`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} adminActivityLog`;
+  async getLogsByActionType(
+    actionType: string,
+    limit = 100,
+  ): Promise<AdminActivityLog[]> {
+    return this.logRepository.find({
+      where: { action_type: actionType },
+      order: { action_time: 'DESC' },
+      relations: ['admin'],
+      take: limit,
+    });
   }
 }

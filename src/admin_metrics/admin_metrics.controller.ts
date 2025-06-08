@@ -1,45 +1,20 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { AdminMetricsService } from './admin_metrics.service';
-import { CreateAdminMetricDto } from './dto/create-admin_metric.dto';
-import { UpdateAdminMetricDto } from './dto/update-admin_metric.dto';
+import { AdminMetric } from './entities/admin_metric.entity';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('admin-metrics')
 export class AdminMetricsController {
-  constructor(private readonly adminMetricsService: AdminMetricsService) {}
-
-  @Post()
-  create(@Body() createAdminMetricDto: CreateAdminMetricDto) {
-    return this.adminMetricsService.create(createAdminMetricDto);
-  }
-
+  constructor(private readonly metricsService: AdminMetricsService) {}
+  @ApiBearerAuth()
   @Get()
-  findAll() {
-    return this.adminMetricsService.findAll();
+  async getMetrics(): Promise<AdminMetric[]> {
+    return await this.metricsService.getMetrics();
   }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.adminMetricsService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateAdminMetricDto: UpdateAdminMetricDto,
-  ) {
-    return this.adminMetricsService.update(+id, updateAdminMetricDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.adminMetricsService.remove(+id);
+  @ApiBearerAuth()
+  @Get('refresh')
+  async refreshMetrics(): Promise<{ message: string }> {
+    await this.metricsService.refreshAllMetrics();
+    return { message: 'Dashboard metrics refreshed successfully' };
   }
 }

@@ -1,14 +1,33 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
 import { Ticket } from 'src/tickets/entities/ticket.entity';
 import { AdminActivityLog } from 'src/admin_activity_logs/entities/admin_activity_log.entity';
+import * as bcrypt from 'bcrypt';
 
 @Entity({ name: 'admins' })
 export class Admin {
-  @PrimaryGeneratedColumn()
-  admin_id: number;
+  @BeforeUpdate()
+  @BeforeInsert()
+  async hashPassword() {
+    if (this.password) {
+      this.password = await bcrypt.hash(this.password, 10);
+    }
+  }
+
+  @PrimaryGeneratedColumn('uuid')
+  admin_id: string;
 
   @Column({ type: 'varchar', length: 255, unique: true, nullable: false })
-  username: string;
+  first_name: string;
+
+  @Column({ type: 'varchar', length: 255, unique: true, nullable: false })
+  last_name: string;
 
   @Column({ type: 'varchar', length: 255, nullable: false, select: false })
   password: string;
@@ -22,7 +41,9 @@ export class Admin {
   @Column({ type: 'timestamp', nullable: true })
   last_login: Date;
 
-  // Relationships
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  hashed_refresh_token: string | null;
+
   @OneToMany(() => Ticket, (ticket) => ticket.assigned_admin)
   tickets: Ticket[];
 

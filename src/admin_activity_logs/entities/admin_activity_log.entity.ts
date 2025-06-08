@@ -1,18 +1,12 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { Admin } from 'src/admins/entities/admin.entity';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Admin } from '../../admins/entities/admin.entity';
 
 @Entity({ name: 'admin_activity_logs' })
 export class AdminActivityLog {
-  @PrimaryGeneratedColumn()
-  log_id: number;
+  @PrimaryGeneratedColumn('uuid')
+  log_id: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: false })
+  @Column({ type: 'varchar', length: 100 })
   action_type: string;
 
   @Column({ type: 'text', nullable: true })
@@ -21,11 +15,15 @@ export class AdminActivityLog {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   action_time: Date;
 
-  @Column({ type: 'varchar', length: 50, nullable: false })
+  @Column({ type: 'varchar', length: 50 })
   ip_address: string;
 
-  // Relationship
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  target_entity: string;
+
+  @Column({ type: 'int', nullable: true })
+  target_id: number;
+
   @ManyToOne(() => Admin, (admin) => admin.activity_logs)
-  @JoinColumn({ name: 'admin_id' })
   admin: Admin;
 }

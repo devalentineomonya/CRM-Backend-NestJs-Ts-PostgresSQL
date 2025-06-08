@@ -22,7 +22,7 @@ export class UserService {
 
     let where: FindOptionsWhere<User> | FindOptionsWhere<User>[] = {};
 
-    if (status ?? account_type) {
+    if (status || account_type) {
       where = {
         ...(status && { status }),
         ...(account_type && { account_type }),
@@ -47,7 +47,7 @@ export class UserService {
     return { success: true, data, count };
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string): Promise<{ success: boolean; data: User }> {
     const user = await this.userRepository.findOne({
       where: { user_id: id.toString() },
       relations: ['profile', 'quotes', 'tickets', 'visits'],
@@ -56,22 +56,38 @@ export class UserService {
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    return user;
+    return { success: true, data: user };
   }
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(
+    createUserDto: CreateUserDto,
+  ): Promise<{ success: boolean; data: User }> {
     const user = this.userRepository.create(createUserDto);
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+    return { success: true, data: savedUser };
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<{ success: boolean; data: User }> {
     const user = await this.findOne(id);
-    const updated = this.userRepository.merge(user, updateUserDto);
-    return this.userRepository.save(updated);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    const updated = this.userRepository.merge(user.data, updateUserDto);
+    const savedUser = await this.userRepository.save(updated);
+    return { success: true, data: savedUser };
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string): Promise<{ success: boolean }> {
     const user = await this.findOne(id);
-    await this.userRepository.remove(user);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    await this.userRepository.remove(user.data);
+    return { success: true };
   }
 }

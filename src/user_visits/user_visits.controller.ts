@@ -1,45 +1,47 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { UserVisitsService } from './user_visits.service';
-import { CreateUserVisitDto } from './dto/create-user_visit.dto';
-import { UpdateUserVisitDto } from './dto/update-user_visit.dto';
+import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
 @Controller('user-visits')
 export class UserVisitsController {
-  constructor(private readonly userVisitsService: UserVisitsService) {}
+  constructor(private readonly visitsService: UserVisitsService) {}
 
-  @Post()
-  create(@Body() createUserVisitDto: CreateUserVisitDto) {
-    return this.userVisitsService.create(createUserVisitDto);
-  }
-
-  @Get()
-  findAll() {
-    return this.userVisitsService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userVisitsService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateUserVisitDto: UpdateUserVisitDto,
+  @ApiBearerAuth()
+  @Get('user/:userId')
+  getUserVisits(
+    @Param('userId') userId: string,
+    @Query('limit') limit?: number,
   ) {
-    return this.userVisitsService.update(+id, updateUserVisitDto);
+    return this.visitsService.getUserVisits(userId, limit);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userVisitsService.remove(+id);
+  @ApiBearerAuth()
+  @Get('user/:userId/count')
+  getUserVisitsWithCount(@Param('userId') userId: string) {
+    return this.visitsService.getUserVisitsWithCount(userId);
+  }
+
+  @ApiBearerAuth()
+  @Get('recent')
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Number of past days',
+  })
+  getRecentVisits(@Query('days') days?: number) {
+    return this.visitsService.getRecentVisits(days ?? 7);
+  }
+
+  @ApiBearerAuth()
+  @Get('all')
+  getAllVisits() {
+    return this.visitsService.getAllVisits();
+  }
+
+  @ApiBearerAuth()
+  @Get('counts-per-user')
+  getVisitCountPerUser() {
+    return this.visitsService.getVisitCountPerUser();
   }
 }
