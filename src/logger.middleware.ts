@@ -1,25 +1,36 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(LoggerMiddleware.name);
+
   use(req: Request, res: Response, next: NextFunction) {
     const startTime = Date.now();
+    const { method, path, headers, ip } = req;
 
-    console.log(
-      `[\x1b[33m${new Date().toISOString()}\x1b[0m] \x1b[32m${req.method}\x1b[0m ${req.path}`,
-    );
+    this.logger.log({
+      method,
+      path,
+      userAgent: headers['user-agent'] || 'Unknown',
+      ip,
+    });
 
-    const originalEnd = res.end.bind(res) as Response['end'];
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const originalEnd = res.end.bind(res);
 
-    res.end = function (...args: Parameters<Response['end']>): Response {
+    res.end = (...args: any[]) => {
       const duration = Date.now() - startTime;
-      console.log(
-        `[\x1b[33m${new Date().toISOString()}\x1b[0m] \x1b[32m${req.method}\x1b[0m ${req.path} - ${res.statusCode} (\x1b[33m${duration}ms\x1b[0m)`,
-      );
 
-      return originalEnd.apply(res, args) as Response;
-    } as Response['end'];
+      this.logger.log({
+        statusCode: res.statusCode,
+        duration: `${duration}ms`,
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      return originalEnd.apply(res, args);
+    };
 
     next();
   }

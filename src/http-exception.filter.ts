@@ -13,7 +13,8 @@ interface ErrorResponse {
   statusCode: number;
   timestamp: string;
   path: string;
-  message: string;
+  message: string | string[];
+  error?: string;
   details?: any;
 }
 
@@ -31,74 +32,68 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
       message: 'Internal Server Error',
     };
 
-    // Handle HttpException (including duck-typed versions)
-    if (
+    // Handle ForbiddenException first
+    if (exception instanceof ForbiddenException) {
+      responseObj.statusCode = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+
+      if (typeof exceptionResponse === 'string') {
+        responseObj.message = exceptionResponse;
+      } else if (typeof exceptionResponse === 'object') {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        responseObj.message =
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          (exceptionResponse as any)?.message || 'Forbidden';
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        responseObj.error = (exceptionResponse as any)?.error || 'Forbidden';
+      }
+    }
+    // Handle HttpException (including class-validator errors)
+    else if (
       exception instanceof HttpException ||
       (typeof exception === 'object' &&
         exception !== null &&
         'getStatus' in exception &&
-        typeof (exception as { getStatus: () => number }).getStatus ===
-          'function')
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        typeof (exception as any).getStatus === 'function')
     ) {
-      const httpException = exception as {
-        getStatus: () => number;
-        getResponse: () => string | object;
-      };
-
+      const httpException = exception as HttpException;
       responseObj.statusCode = httpException.getStatus();
       const exceptionResponse = httpException.getResponse();
 
       if (typeof exceptionResponse === 'string') {
         responseObj.message = exceptionResponse;
-      } else if (
-        typeof exceptionResponse === 'object' &&
-        exceptionResponse !== null
-      ) {
-        // Handle response objects
-        if (
-          typeof exceptionResponse === 'object' &&
-          exceptionResponse !== null &&
-          'message' in exceptionResponse
-        ) {
-          responseObj.message = (
-            exceptionResponse as { message: string }
-          ).message;
-        } else {
-          responseObj.message = 'Error';
-        }
+        responseObj.error = HttpStatus[responseObj.statusCode];
+      } else if (typeof exceptionResponse === 'object') {
+        const res = exceptionResponse as Record<string, any>;
 
-        if (
-          typeof exceptionResponse === 'object' &&
-          exceptionResponse !== null &&
-          'error' in exceptionResponse
-        ) {
-          responseObj.details = (exceptionResponse as { error: string }).error;
-        } else {
-          responseObj.details = undefined;
+        // Special handling for class-validator errors
+        if (Array.isArray(res.message)) {
+          responseObj.message = res.message;
+          responseObj.error =
+            typeof res.error === 'string' ? res.error : 'Validation Error';
+        }
+        // Standard HttpException error format
+        else {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          responseObj.message = res.message || 'Error';
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          responseObj.error = res.error || HttpStatus[responseObj.statusCode];
         }
       }
     }
-
-    // Handle ForbiddenException with custom messages
-    if (exception instanceof ForbiddenException) {
-      responseObj.statusCode = exception.getStatus();
-      const response = exception.getResponse();
-
-      if (typeof response === 'string') {
-        responseObj.message = response;
-      } else if (typeof response === 'object' && response !== null) {
-        const typedResponse = response as { error?: string };
-        responseObj.details = typedResponse.error || 'Insufficient permissions';
-      }
-    }
-
-    // Handle other exception types
+    // Handle TypeORM QueryFailedError
     else if (exception instanceof QueryFailedError) {
       responseObj.statusCode = HttpStatus.BAD_REQUEST;
       responseObj.message = 'Database query failed';
+      responseObj.error = 'Database Error';
       responseObj.details = exception.message;
-    } else if (exception instanceof Error) {
+    }
+    // Handle generic JavaScript errors
+    else if (exception instanceof Error) {
       responseObj.message = exception.message;
+      responseObj.error = 'Internal Server Error';
+
       if (process.env.NODE_ENV === 'development') {
         responseObj.details = exception.stack;
       }

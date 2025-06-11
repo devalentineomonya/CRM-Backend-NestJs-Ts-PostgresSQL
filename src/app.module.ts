@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { WelcomeController } from './welcome.controller';
 import { UsersModule } from './users/users.module';
 import { ProfileModule } from './profiles/profiles.module';
@@ -14,6 +14,11 @@ import { AccessTokenGuard } from './auth/guards/access-token.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { ContactHelper } from './shared/helpers/contact.helper';
+import { LoggerMiddleware } from './logger.middleware';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+import { SeedModule } from './seed/seed.module';
 
 @Module({
   imports: [
@@ -27,10 +32,23 @@ import { ContactHelper } from './shared/helpers/contact.helper';
     AdminActivityLogsModule,
     DatabaseModule,
     AuthModule,
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: config.getOrThrow('THROTTLER_TTL'),
+          limit: config.getOrThrow('THROTTLER_LIMIT'),
+        },
+      ],
+    }),
+    SeedModule,
   ],
+
   controllers: [WelcomeController],
   providers: [
     ContactHelper,
+
     {
       provide: APP_GUARD,
       useClass: AccessTokenGuard,
@@ -39,6 +57,14 @@ import { ContactHelper } from './shared/helpers/contact.helper';
       provide: APP_GUARD,
       useClass: RolesGuard,
     },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}

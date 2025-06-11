@@ -16,7 +16,7 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from 'src/auth/decorators/roles.decorators';
 import { Role } from 'src/auth/enums/role.enum';
 
-@Roles(Role.SUPER_ADMIN)
+@Roles(Role.SUPER_ADMIN, Role.SUPPORT_ADMIN, Role.QUOTATIONS_ADMIN)
 @Controller('admins')
 export class AdminsController {
   constructor(private readonly adminsService: AdminsService) {}

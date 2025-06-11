@@ -17,7 +17,10 @@ export class UserVisit {
   @Column({ type: 'varchar', length: 50, nullable: false })
   ip_address: string;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: false })
+  user_agent: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
   device_type: string;
 
   @ManyToOne(() => User, (user) => user.visits)

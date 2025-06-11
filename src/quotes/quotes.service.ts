@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike, FindOptionsWhere } from 'typeorm';
 import { Quote } from './entities/quote.entity';
@@ -6,6 +10,8 @@ import { CreateQuote } from './dto/create-quote.dto';
 import { UpdateQuote } from './dto/update-quote.dto';
 import { QuoteFilter } from './dto/filter-quote.dto';
 import { User } from 'src/users/entities/user.entity';
+import { UpdateQuoteStatusDto } from './dto/update-status.dto';
+import { MailService } from 'src/shared/mail/mail.service';
 
 @Injectable()
 export class QuoteService {
@@ -14,6 +20,7 @@ export class QuoteService {
     private quoteRepository: Repository<Quote>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private mailService: MailService,
   ) {}
 
   async create(userId: string, createQuote: CreateQuote): Promise<Quote> {
@@ -77,6 +84,44 @@ export class QuoteService {
     const quote = await this.findOne(id);
     const updated = this.quoteRepository.merge(quote, updateQuote);
     return this.quoteRepository.save(updated);
+  }
+  async updateStatus(
+    id: string,
+    updateStatusDto: UpdateQuoteStatusDto,
+  ): Promise<Quote> {
+    const quote = await this.quoteRepository.findOne({
+      where: { quote_id: id },
+      relations: ['user'],
+    });
+
+    if (!quote) {
+      throw new NotFoundException(`Quote with ID ${id} not found`);
+    }
+
+    if (quote.status === (updateStatusDto.status as typeof quote.status)) {
+      throw new BadRequestException(
+        `The quote is already in the status: ${updateStatusDto.status}`,
+      );
+    }
+
+    quote.status = updateStatusDto.status;
+    const updatedQuote = await this.quoteRepository.save(quote);
+
+    const customerName = `${quote.user.first_name} ${quote.user.last_name}`;
+
+    await this.mailService.sendQuotationStatusEmail(quote.user.email, {
+      status: updateStatusDto.status,
+      quoteNumber: quote.quote_id,
+      projectName: quote.quote_details,
+      customerName,
+      estimatedCost: quote.estimated_cost.toString(),
+      currency: `Kes`,
+      validUntil: quote.valid_until,
+      message: `Dear ${customerName}, your quote with ID ${quote.quote_id} has been updated to status: ${updateStatusDto.status}. Please review the details and contact us if you have any questions.`,
+      dashboardUrl: 'https://localhost:3000/quotes',
+    });
+
+    return updatedQuote;
   }
 
   async remove(id: string): Promise<void> {

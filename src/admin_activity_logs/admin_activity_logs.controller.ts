@@ -16,7 +16,6 @@ export class AdminActivityLogsController {
       admin_id: 1,
       username: 'admin_user',
       email: 'admin@example.com',
-      // Other required fields...
     };
 
     return this.logsService.createLog(

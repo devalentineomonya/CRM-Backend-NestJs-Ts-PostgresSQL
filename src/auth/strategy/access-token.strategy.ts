@@ -35,7 +35,6 @@ export class AccessTokenStrategy extends PassportStrategy(
 
   async validate(payload: JWTPayload) {
     let entity: User | Admin | null = null;
-
     if (payload.userType === 'user') {
       entity = await this.userRepository.findOneBy({ user_id: payload.sub });
     } else if (payload.userType === 'admin') {

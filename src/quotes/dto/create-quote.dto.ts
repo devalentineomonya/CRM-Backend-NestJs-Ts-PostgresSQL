@@ -1,26 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsIn,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateQuote {
   @ApiProperty({ description: 'Details of the quote' })
   @IsNotEmpty()
   @IsString()
   quote_details: string;
-
-  @ApiPropertyOptional({
-    description: 'Status of the quote',
-    enum: ['pending', 'approved', 'rejected', 'expired'],
-  })
-  @IsOptional()
-  @IsString()
-  @IsIn(['pending', 'approved', 'rejected', 'expired'])
-  status?: string;
 
   @ApiPropertyOptional({
     description: 'Estimated cost of the quote',

@@ -22,9 +22,10 @@ import { Roles } from 'src/auth/decorators/roles.decorators';
 import { Role } from 'src/auth/enums/role.enum';
 import { PermissionHelper } from 'src/shared/helpers/permission.helper';
 import { RequestWithUser } from 'src/shared/types/request.types';
+import { UpdateAccountTypeDto } from './dto/update-account-type.dto';
+import { UpdateUserStatusDto } from './dto/update-status.dto';
 
-@ApiBearerAuth()
-@Roles(Role.FREE_USER)
+@Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
 @Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
 export class UserController {
@@ -41,11 +42,13 @@ export class UserController {
       .then((response) => response.data);
   }
 
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
   @Get()
   findAll(@Query() filter: UserFilterDto) {
     return this.userService.findAll(filter);
   }
-
+  @ApiBearerAuth()
   @Get(':id')
   async findOne(
     @Param('id') id: string,
@@ -56,6 +59,7 @@ export class UserController {
     return this.userService.findOne(id).then((response) => response.data);
   }
 
+  @ApiBearerAuth()
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -68,6 +72,22 @@ export class UserController {
       .then((response) => response.data);
   }
 
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Patch('account-type')
+  async updateAccountType(@Body() updateAccountTypeDto: UpdateAccountTypeDto) {
+    return this.userService.updateAccountType(updateAccountTypeDto);
+  }
+
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Patch('status')
+  async updateStatus(@Body() updateStatusDto: UpdateUserStatusDto) {
+    return this.userService.updateStatus(updateStatusDto);
+  }
+
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
   @Delete(':id')
   remove(@Param('id') id: string): Promise<{ success: boolean }> {
     return this.userService.remove(id);

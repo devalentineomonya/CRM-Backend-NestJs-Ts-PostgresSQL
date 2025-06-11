@@ -4,14 +4,39 @@ import { AllExceptionsFilter } from './http-exception.filter';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
+import * as basicAuth from 'express-basic-auth';
+import { TimeoutInterceptor } from './timeout-intercepter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.useGlobalPipes(new ValidationPipe());
-
-  const { httpAdapter } = app.get(HttpAdapterHost);
   const configService = app.get(ConfigService);
 
+  app.use(helmet());
+
+  // Enable CORS
+  app.enableCors({
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    allowedHeaders: 'Content-Type, Accept, Authorization',
+    credentials: true,
+  });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
+  // const timeoutInMillis =
+  //   configService.get<number>('TIMEOUT_IN_MILLIS') || 5000;
+  // app.useGlobalInterceptors(new TimeoutInterceptor(timeoutInMillis));
+
+  // Swagger configuration
   const config = new DocumentBuilder()
     .addBearerAuth({
       type: 'http',
@@ -19,6 +44,7 @@ async function bootstrap() {
       bearerFormat: 'JWT',
       name: 'jwt-access-token',
     })
+
     .setTitle('CRM System')
     .setDescription(
       'A comprehensive Customer Relationship Management (CRM) System to manage user interactions, quotes, and tickets effectively.',
@@ -27,13 +53,38 @@ async function bootstrap() {
     .addTag('CRM')
     .build();
 
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, documentFactory);
-  app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
+  // Protect Swagger endpoints in non-development environments
+  // if (process.env.NODE_ENV !== 'development') {
+  const swaggerUser = configService.getOrThrow<string>('SWAGGER_USER');
+  const swaggerPass = configService.getOrThrow<string>('SWAGGER_PASS');
 
-  const PORT = configService.getOrThrow<number>('PORT');
+  app.use(
+    ['/api', '/api-json'],
+    basicAuth({
+      challenge: true,
+      users: { [swaggerUser]: swaggerPass },
+      realm: 'Swagger Documentation',
+    }),
+  );
+  // }
 
-  await app.listen(PORT ?? 3000);
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'none',
+      operationsSorter: 'none',
+      docExpansion: 'none',
+      filter: true,
+      showRequestDuration: true,
+      tryItOutEnabled: true,
+    },
+    customSiteTitle: 'CRM System API Documentation',
+    customCss: '.topbar { display: none; }',
+  });
+
+  const PORT = configService.get<number>('PORT') || 3000;
+  await app.listen(PORT);
 }
 
 bootstrap();

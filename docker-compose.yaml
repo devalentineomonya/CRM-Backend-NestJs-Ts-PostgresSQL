@@ -1,0 +1,32 @@
+version: "1.0"
+
+services:
+  crm_system:
+    build:
+      context: .
+    container_name: crm_system
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      crm_database:
+        condition: service_healthy
+
+  crm_database:
+    image: postgres:16-alpine
+    container_name: crm_database
+    restart: always
+    environment:
+      POSTGRES_DB: ${DATABASE_DB}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - crm-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  crm-data:

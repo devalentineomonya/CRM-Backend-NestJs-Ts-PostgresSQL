@@ -16,6 +16,7 @@ import { AdminsService } from 'src/admins/admins.service';
 import { AdminsModule } from 'src/admins/admins.module';
 import { PermissionHelper } from 'src/shared/helpers/permission.helper';
 import { ContactHelper } from 'src/shared/helpers/contact.helper';
+import { MailModule } from 'src/shared/mail/mail.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ContactHelper } from 'src/shared/helpers/contact.helper';
     UsersModule,
     AdminsModule,
     PassportModule,
+    MailModule,
   ],
   controllers: [AuthController],
   providers: [

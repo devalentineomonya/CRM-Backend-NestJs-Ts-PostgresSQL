@@ -22,7 +22,7 @@ export class User {
   @BeforeInsert()
   async hashPassword() {
     if (this.password) {
-      this.password = await bcrypt.hash(this.password, 10);
+      this.password = await bcrypt.hash(this.password, 12);
     }
   }
   @PrimaryGeneratedColumn('uuid')
@@ -38,7 +38,7 @@ export class User {
   @Column({ type: 'varchar', length: 255, unique: true, nullable: false })
   email: string;
 
-  @Column({ type: 'varchar', length: 15, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   phone_number: string;
 
   @Column({ type: 'varchar', length: 255, nullable: false, select: false })

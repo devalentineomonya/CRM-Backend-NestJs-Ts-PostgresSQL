@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsOptional, IsIn } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class CreateTicketDto {
   @ApiProperty({
@@ -8,16 +8,6 @@ export class CreateTicketDto {
   @IsNotEmpty()
   @IsString()
   issue: string;
-
-  @ApiPropertyOptional({
-    description: 'The priority level of the ticket',
-    example: 'high',
-    enum: ['low', 'medium', 'high'],
-  })
-  @IsOptional()
-  @IsString()
-  @IsIn(['low', 'high', 'medium'])
-  priority_level?: 'low' | 'medium' | 'high';
 
   @ApiProperty({
     description: 'The ID of the user creating the ticket',
