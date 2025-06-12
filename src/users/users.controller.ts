@@ -25,9 +25,8 @@ import { RequestWithUser } from 'src/shared/types/request.types';
 import { UpdateAccountTypeDto } from './dto/update-account-type.dto';
 import { UpdateUserStatusDto } from './dto/update-status.dto';
 
-@Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
-@Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
+@Controller('users')
 export class UserController {
   constructor(
     private readonly userService: UserService,
@@ -36,10 +35,10 @@ export class UserController {
 
   @Public()
   @Post()
-  async create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return this.userService
-      .create(createUserDto)
-      .then((response) => response.data);
+  async create(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<{ success: boolean; data: User }> {
+    return await this.userService.create(createUserDto);
   }
 
   @Roles(Role.SUPER_ADMIN)
@@ -48,28 +47,28 @@ export class UserController {
   findAll(@Query() filter: UserFilterDto) {
     return this.userService.findAll(filter);
   }
+
+  @Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
   @ApiBearerAuth()
   @Get(':id')
   async findOne(
     @Param('id') id: string,
     @Req() req: RequestWithUser,
-  ): Promise<User> {
+  ): Promise<{ success: boolean; data: User }> {
     this.permissionHelper.checkPermission(id, req.user);
-
-    return this.userService.findOne(id).then((response) => response.data);
+    return await this.userService.findOne(id);
   }
 
+  @Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
   @ApiBearerAuth()
   @Patch(':id')
   async update(
     @Param('id') id: string,
     @Req() req: RequestWithUser,
     @Body() updateUserDto: UpdateUserDto,
-  ): Promise<User> {
+  ): Promise<{ success: boolean; data: User }> {
     this.permissionHelper.checkPermission(id, req.user);
-    return this.userService
-      .update(id, updateUserDto)
-      .then((response) => response.data);
+    return await this.userService.update(id, updateUserDto);
   }
 
   @Roles(Role.SUPER_ADMIN)
