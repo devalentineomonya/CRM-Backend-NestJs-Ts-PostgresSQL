@@ -1,0 +1,55 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+  plugins:
+    faker: {}
+
+  processor: "dist/script/artillery.processor.js"
+
+  variables:
+    defaultPassword: "Password123!"
+
+scenarios:
+  - name: Complete User Flow
+    flow:
+      - function: generateUser
+      - post:
+          url: "/auth/sigin"
+          json:
+            email: "{{ user.email }}"
+            password: "{{ user.password }}"
+          capture:
+            - json: "user_id"
+              as: "userId"
+            - json: "email"
+              as: "email"
+            - json: "password"
+              as: "password"
+      - post:
+          url: "/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "accessToken"
+              as: "accessToken"
+            - json: "user_id"
+              as: "userId"
+      - post:
+          url: "/profile/{{ userId }}"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          json:
+            address: "{{ user.address }}"
+            city: "{{ user.city }}"
+            country: "{{ user.country }}"
+            zip_code: "{{ user.zip_code }}"
+            preferred_language: "en"
+            date_of_birth: "{{ user.dob }}"
+            social_media_links: ["https://twitter.com/{{ user.username }}"]
+      - post:
+          url: "/auth/signout/{{ userId }}"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
