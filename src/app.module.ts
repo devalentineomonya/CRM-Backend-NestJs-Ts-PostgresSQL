@@ -17,9 +17,12 @@ import { ContactHelper } from './shared/helpers/contact.helper';
 import { LoggerMiddleware } from './logger.middleware';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-
+import { CacheInterceptor, CacheModule } from '@nestjs/cache-manager';
 import { SeedModule } from './seed/seed.module';
 // import { MetricsCronModule } from './crons/metrics-cron.module';
+import { createKeyv, Keyv } from '@keyv/redis';
+import { CacheableMemory } from 'cacheable';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -34,6 +37,23 @@ import { SeedModule } from './seed/seed.module';
     AdminActivityLogsModule,
     DatabaseModule,
     AuthModule,
+
+    CacheModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      isGlobal: true,
+      useFactory: (configService: ConfigService) => {
+        return {
+          ttl: 60000,
+          stores: [
+            new Keyv({
+              store: new CacheableMemory({ ttl: 30000, lruSize: 5000 }),
+            }),
+            createKeyv(configService.getOrThrow<string>('REDIS_URL')),
+          ],
+        };
+      },
+    }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -50,7 +70,10 @@ import { SeedModule } from './seed/seed.module';
   controllers: [WelcomeController],
   providers: [
     ContactHelper,
-
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: CacheInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: AccessTokenGuard,
