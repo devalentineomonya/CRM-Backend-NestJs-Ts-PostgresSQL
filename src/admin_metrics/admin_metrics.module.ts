@@ -22,5 +22,6 @@ import { User } from 'src/users/entities/user.entity';
   ],
   controllers: [AdminMetricsController],
   providers: [AdminMetricsService],
+  exports: [AdminMetricsService],
 })
 export class AdminMetricsModule {}

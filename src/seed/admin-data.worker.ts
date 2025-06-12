@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { parentPort, workerData } from 'worker_threads';
 import { faker } from '@faker-js/faker';
 import { AdminActivityLog, Admin } from './index';
@@ -31,5 +30,5 @@ function generateAdminLogs(admins: Admin[]) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
 parentPort?.postMessage(generateAdminLogs(workerData.admins));
