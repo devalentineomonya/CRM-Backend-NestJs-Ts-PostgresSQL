@@ -5,7 +5,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
-import { Observable, TimeoutError, throwError } from 'rxjs';
+import { Observable, TimeoutError } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 
 @Injectable()
@@ -16,12 +16,13 @@ export class TimeoutInterceptor implements NestInterceptor {
     return next.handle().pipe(
       timeout(this.timeoutInMillis),
       catchError((err: unknown) => {
+        // Only transform TimeoutError; let all other errors bubble up
         if (err instanceof TimeoutError) {
           throw new GatewayTimeoutException('Gateway timeout has occurred');
         }
-        const errorMessage =
-          err instanceof Error ? err.message : 'Unknown error';
-        return throwError(() => new Error(errorMessage));
+
+        // Re-throw original error for the global exception filter to handle
+        throw err;
       }),
     );
   }

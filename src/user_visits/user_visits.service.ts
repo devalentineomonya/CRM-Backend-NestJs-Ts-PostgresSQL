@@ -72,6 +72,6 @@ export class UserVisitsService {
       .addGroupBy('user.last_name')
       .getRawMany();
 
-    return result;
+    return result as { userId: string; fullName: string; count: number }[];
   }
 }

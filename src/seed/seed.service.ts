@@ -13,6 +13,8 @@ import {
   Profile,
 } from './index';
 import { faker } from '@faker-js/faker';
+import { WorkerPayload } from './worker-data.types';
+import { ConfigService } from '@nestjs/config'; // Add this import
 
 @Injectable()
 export class SeedService {
@@ -28,6 +30,7 @@ export class SeedService {
     @InjectRepository(AdminActivityLog)
     private logRepo: Repository<AdminActivityLog>,
     private dataSource: DataSource,
+    private configService: ConfigService,
   ) {}
 
   async seed() {
@@ -38,32 +41,70 @@ export class SeedService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      // Create base users and admins with smaller batches
-      const { users, admins } = await this.createBaseEntities();
+      await this.createBaseEntities();
 
-      // Generate related entities using workers
-      const [userData, adminLogs] = await Promise.all([
+      // Get database configuration from environment
+      const dbConfig = {
+        type: 'postgres',
+        host: this.configService.get<string>('DATABASE_HOST'),
+        port: this.configService.get<number>('DATABASE_PORT'),
+        username: this.configService.get<string>('DATABASE_USER'),
+        password: this.configService.get<string>('DATABASE_PASSWORD'),
+        database: this.configService.get<string>('DATABASE_DB'),
+      };
+
+      const workerId = Math.random().toString(36).substring(7);
+      this.logger.log(`Starting user data worker ${workerId}`);
+
+      const [userDataResult, adminLogsResult] = await Promise.allSettled([
         this.runWorker<{
-          profiles: Profile[];
-          quotes: Quote[];
-          visits: UserVisit[];
-          tickets: Ticket[];
+          success: boolean;
+          profiles: number;
+          quotes: number;
+          visits: number;
+          tickets: number;
         }>(join(__dirname, 'user-data.worker.js'), {
-          users,
-          admins,
+          dbConfig,
+          workerId,
         }),
-        this.runWorker<AdminActivityLog[]>(
+        this.runWorker<Omit<AdminActivityLog, 'log_id'>[]>(
           join(__dirname, 'admin-data.worker.js'),
-          { admins },
+          {
+            dbConfig,
+            workerId: Math.random().toString(36).substring(7),
+          },
         ),
       ]);
 
-      // Use smaller batch sizes and clean data before insertion
-      await this.batchSaveWithCleaning(Profile, userData.profiles, 100);
-      await this.batchSaveWithCleaning(Quote, userData.quotes, 50);
-      await this.batchSaveWithCleaning(UserVisit, userData.visits, 100);
-      await this.batchSaveWithCleaning(Ticket, userData.tickets, 50);
-      await this.batchSaveWithCleaning(AdminActivityLog, adminLogs, 100);
+      // Handle user data worker result
+      if (userDataResult.status === 'fulfilled') {
+        const userData = userDataResult.value;
+        if (userData.success) {
+          this.logger.log(`Worker ${workerId} completed. Generated:`, {
+            profiles: userData.profiles,
+            quotes: userData.quotes,
+            visits: userData.visits,
+            tickets: userData.tickets,
+          });
+        } else {
+          throw new Error('User data worker failed');
+        }
+      } else {
+        this.logger.error(`Worker ${workerId} failed:`, userDataResult.reason);
+        throw new Error('User data worker failed');
+      }
+
+      // Handle admin logs worker result
+      if (adminLogsResult.status === 'fulfilled') {
+        const adminLogs = adminLogsResult.value;
+        this.logger.log(`Saved ${adminLogs.length} admin activity logs`);
+      } else {
+        this.logger.error(
+          'Failed to retrieve admin logs:',
+          adminLogsResult.reason,
+        );
+        throw new Error('Admin logs worker failed');
+      }
 
       await queryRunner.commitTransaction();
       this.logger.log('Database seeding completed successfully');
@@ -76,160 +117,157 @@ export class SeedService {
     }
   }
 
-  // New method that cleans data and uses smaller batches
-  async batchSaveWithCleaning<T>(entity: any, data: T[], batchSize = 100) {
-    this.logger.log(`Saving ${data.length} records of ${entity.name} in batches of ${batchSize}`);
-    
-    for (let i = 0; i < data.length; i += batchSize) {
-      const chunk = data.slice(i, i + batchSize);
-      
-      // Clean the data to remove circular references and undefined values
-      const cleanedChunk = chunk.map(item => this.cleanObject(item));
-      
-      try {
-        await this.dataSource.manager.insert(entity, cleanedChunk);
-        
-        // Log progress every 1000 records
-        if ((i + batchSize) % 1000 === 0 || i + batchSize >= data.length) {
-          this.logger.log(`Processed ${Math.min(i + batchSize, data.length)}/${data.length} ${entity.name} records`);
-        }
-      } catch (error) {
-        this.logger.error(`Failed to insert batch ${i}-${i + batchSize} for ${entity.name}:`, error);
-        throw error;
+  private cleanObject<T>(obj: T): T {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map((item: T) => this.cleanObject(item)) as unknown as T;
+    }
+
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (
+        key.startsWith('__') ||
+        [
+          'user',
+          'admin',
+          'assigned_admin',
+          'profile',
+          'quotes',
+          'tickets',
+          'visits',
+        ].includes(key)
+      ) {
+        continue;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const cleanedValue = this.cleanObject(value);
+      if (cleanedValue !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        result[key] = cleanedValue;
       }
     }
-  }
 
-  // Alternative method using query builder for better performance
-  async batchSaveWithQueryBuilder<T>(entity: any, data: T[], batchSize = 100) {
-    this.logger.log(`Saving ${data.length} records of ${entity.name} using query builder`);
-    
-    for (let i = 0; i < data.length; i += batchSize) {
-      const chunk = data.slice(i, i + batchSize);
-      const cleanedChunk = chunk.map(item => this.cleanObject(item));
-      
-      try {
-        await this.dataSource
-          .createQueryBuilder()
-          .insert()
-          .into(entity)
-          .values(cleanedChunk)
-          .execute();
-          
-        if ((i + batchSize) % 1000 === 0 || i + batchSize >= data.length) {
-          this.logger.log(`Processed ${Math.min(i + batchSize, data.length)}/${data.length} ${entity.name} records`);
-        }
-      } catch (error) {
-        this.logger.error(`Failed to insert batch ${i}-${i + batchSize} for ${entity.name}:`, error);
-        throw error;
-      }
-    }
-  }
-
-  // Clean object to remove circular references and undefined values
-  private cleanObject(obj: any): any {
-    const seen = new WeakSet();
-    
-    const clean = (item: any): any => {
-      if (item === null || typeof item !== 'object') {
-        return item;
-      }
-      
-      if (seen.has(item)) {
-        return undefined; // Remove circular reference
-      }
-      
-      seen.add(item);
-      
-      if (Array.isArray(item)) {
-        return item.map(clean).filter(x => x !== undefined);
-      }
-      
-      const result: any = {};
-      for (const [key, value] of Object.entries(item)) {
-        // Skip relation objects to avoid circular references
-        if (key === 'user' || key === 'admin' || key === 'assigned_admin') {
-          continue;
-        }
-        
-        const cleanedValue = clean(value);
-        if (cleanedValue !== undefined) {
-          result[key] = cleanedValue;
-        }
-      }
-      
-      return result;
-    };
-    
-    return clean(obj);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return result;
   }
 
   private async createBaseEntities() {
     this.logger.log('Creating base entities (users and admins)');
-    
-    // Create users in smaller batches
-    const users: User[] = [];
-    const userBatchSize = 1000;
-    const totalUsers = 50000;
-    
-    for (let i = 0; i < totalUsers; i += userBatchSize) {
-      const batch = Array.from({ length: Math.min(userBatchSize, totalUsers - i) }, () => {
-        const user = new User();
-        user.first_name = faker.person.firstName();
-        user.last_name = faker.person.lastName();
-        user.email = faker.internet.email();
-        user.phone_number = faker.phone.number();
-        user.account_type = faker.helpers.arrayElement(['free', 'premium']);
-        user.status = faker.helpers.arrayElement(['active', 'inactive']);
-        user.profile_picture = faker.internet.url();
-        user.password = 'Password123!';
-        return user;
-      });
-      
-      const savedBatch = await this.userRepo.save(batch);
-      users.push(...savedBatch);
-      
-      this.logger.log(`Created ${users.length}/${totalUsers} users`);
-    }
 
-    // Create admins in smaller batches
-    const admins: Admin[] = [];
-    const adminBatchSize = 500;
-    const totalAdmins = 5000;
-    
-    for (let i = 0; i < totalAdmins; i += adminBatchSize) {
-      const batch = Array.from({ length: Math.min(adminBatchSize, totalAdmins - i) }, () => {
-        const admin = new Admin();
-        admin.first_name = faker.person.firstName();
-        admin.last_name = faker.person.lastName();
-        admin.email = faker.internet.email();
-        admin.password = 'AdminPassword123!';
-        admin.role = faker.helpers.arrayElement([
-          'super',
-          'support',
-          'quotations',
-          'system',
-        ]);
-        return admin;
-      });
-      
-      const savedBatch = await this.adminRepo.save(batch);
-      admins.push(...savedBatch);
-      
-      this.logger.log(`Created ${admins.length}/${totalAdmins} admins`);
-    }
+    const createUsers = async () => {
+      const users: User[] = [];
+      const userBatchSize = 500;
+      const totalUsers = 50000;
 
+      for (let i = 0; i < totalUsers; i += userBatchSize) {
+        const batch = Array.from(
+          { length: Math.min(userBatchSize, totalUsers - i) },
+          () => {
+            const user = new User();
+            user.first_name = faker.person.firstName();
+            user.last_name = faker.person.lastName();
+            user.email = faker.internet.email();
+            user.phone_number = faker.phone.number();
+            user.account_type = faker.helpers.arrayElement(['free', 'premium']);
+            user.status = faker.helpers.arrayElement(['active', 'inactive']);
+            user.profile_picture = faker.internet.url();
+            user.password = 'Password123!';
+
+            return user;
+          },
+        );
+
+        try {
+          const savedBatch = await this.userRepo.save(batch);
+          users.push(...savedBatch);
+          this.logger.log(`Created ${users.length}/${totalUsers} users`);
+        } catch (error) {
+          this.logger.error(`Failed to create a batch of users:`, error);
+        }
+      }
+
+      return users;
+    };
+
+    const createAdmins = async () => {
+      const admins: Admin[] = [];
+      const adminBatchSize = 500;
+      const totalAdmins = 50000;
+
+      for (let i = 0; i < totalAdmins; i += adminBatchSize) {
+        const batch = Array.from(
+          { length: Math.min(adminBatchSize, totalAdmins - i) },
+          () => {
+            const admin = new Admin();
+            admin.first_name = faker.person.firstName();
+            admin.last_name = faker.person.lastName();
+            admin.email = faker.internet.email();
+            admin.password = 'AdminPassword123!';
+            admin.role = faker.helpers.arrayElement([
+              'super',
+              'support',
+              'quotations',
+              'system',
+            ]);
+            return admin;
+          },
+        );
+
+        try {
+          const savedBatch = await this.adminRepo.save(batch);
+          admins.push(...savedBatch);
+          this.logger.log(`Created ${admins.length}/${totalAdmins} admins`);
+        } catch (error) {
+          this.logger.error(`Failed to create a batch of admins:`, error);
+        }
+      }
+
+      return admins;
+    };
+
+    const [users, admins] = await Promise.all([createUsers(), createAdmins()]);
     return { users, admins };
   }
 
-  private runWorker<T>(path: string, workerData: any): Promise<T> {
+  private runWorker<T>(path: string, workerData: WorkerPayload): Promise<T> {
     return new Promise((resolve, reject) => {
       const worker = new Worker(path, { workerData });
-      worker.on('message', resolve);
-      worker.on('error', reject);
+
+      worker.on('message', (data: { error?: string }) => {
+        if (data.error) {
+          this.logger.error(
+            `Worker error: ${workerData.workerId || 'unknown'}`,
+            data.error,
+          );
+          reject(new Error(data.error));
+        } else {
+          this.logger.log(
+            `Worker completed: ${workerData.workerId || 'unknown'}`,
+          );
+          resolve(data as T);
+        }
+      });
+
+      worker.on('error', (error) => {
+        this.logger.error(
+          `Worker error: ${workerData.workerId || 'unknown'}`,
+          error,
+        );
+        reject(error);
+      });
+
       worker.on('exit', (code) => {
-        if (code !== 0)
-          reject(new Error(`Worker stopped with exit code ${code}`));
+        if (code !== 0) {
+          const error = new Error(
+            `Worker ${workerData.workerId || 'unknown'} stopped with exit code ${code}`,
+          );
+          this.logger.error(error.message);
+          reject(error);
+        }
       });
     });
   }

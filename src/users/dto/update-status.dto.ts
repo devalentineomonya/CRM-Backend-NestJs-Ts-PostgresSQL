@@ -8,5 +8,5 @@ export class UpdateUserStatusDto {
     description: 'The new account type for the user',
     enum: ['active', 'inactive'],
   })
-  status: 'active' | 'free';
+  status: 'active' | 'inactive';
 }

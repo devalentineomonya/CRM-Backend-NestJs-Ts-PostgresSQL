@@ -23,15 +23,19 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TicketFilterDto } from './dto/filter-ticket.dto';
 import { TicketStatusDto } from './dto/ticket-status.dto';
 import { TicketPriorityDto } from './dto/priority.dto';
-import { AssignAdminDto } from './dto/assign--to-admin.dto';
+import { AssignAdminDto } from './dto/assign-to-admin.dto';
 import { Role } from 'src/auth/enums/role.enum';
 import { Roles } from 'src/auth/decorators/roles.decorators';
 import { RequestWithUser } from 'src/shared/types/request.types';
+import { PermissionHelper } from 'src/shared/helpers/permission.helper';
 
 @ApiTags('tickets')
 @Controller('tickets')
 export class TicketsController {
-  constructor(private readonly ticketsService: TicketsService) {}
+  constructor(
+    private readonly ticketsService: TicketsService,
+    private readonly permissionHelper: PermissionHelper,
+  ) {}
 
   @ApiBearerAuth()
   @Post(':userId')
@@ -67,6 +71,23 @@ export class TicketsController {
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   findOne(@Param('id') id: string): Promise<Ticket> {
     return this.ticketsService.findOne(id);
+  }
+
+  @ApiBearerAuth()
+  @Get('user/:userId')
+  @ApiOperation({ summary: 'Get a ticket by User ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Ticket retrieved successfully',
+    type: Ticket,
+  })
+  @ApiResponse({ status: 404, description: 'Ticket not found' })
+  findByUserId(
+    @Param('userId') userId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Ticket[]> {
+    this.permissionHelper.checkPermission(userId, req.user);
+    return this.ticketsService.findByUserId(userId);
   }
 
   @ApiBearerAuth()

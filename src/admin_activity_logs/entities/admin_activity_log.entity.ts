@@ -12,7 +12,14 @@ export class AdminActivityLog {
   @Column({ type: 'text', nullable: true })
   action_details: string;
 
-  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({
+    type: 'timestamp',
+    default: () => 'CURRENT_TIMESTAMP',
+    transformer: {
+      to: (value: Date) => value,
+      from: (value: string) => new Date(value),
+    },
+  })
   action_time: Date;
 
   @Column({ type: 'varchar', length: 50 })

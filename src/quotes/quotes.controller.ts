@@ -8,6 +8,7 @@ import {
   Query,
   Body,
   Patch,
+  Req,
 } from '@nestjs/common';
 import { QuoteService } from './quotes.service';
 import { Quote } from './entities/quote.entity';
@@ -18,6 +19,8 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { UpdateQuoteStatusDto } from './dto/update-status.dto';
 import { Roles } from 'src/auth/decorators/roles.decorators';
 import { Role } from 'src/auth/enums/role.enum';
+import { PermissionHelper } from 'src/shared/helpers/permission.helper';
+import { RequestWithUser } from 'src/shared/types/request.types';
 
 @Roles(
   Role.FREE_USER,
@@ -27,7 +30,10 @@ import { Role } from 'src/auth/enums/role.enum';
 )
 @Controller('quotes')
 export class QuotesController {
-  constructor(private readonly quotesService: QuoteService) {}
+  constructor(
+    private readonly quotesService: QuoteService,
+    private readonly permissionHelper: PermissionHelper,
+  ) {}
   @ApiBearerAuth()
   @Post(':userId')
   create(
@@ -47,6 +53,15 @@ export class QuotesController {
   @Get(':id')
   findOne(@Param('id') id: string): Promise<Quote> {
     return this.quotesService.findOne(id);
+  }
+  @ApiBearerAuth()
+  @Get('user/:userId')
+  async findByUserId(
+    @Param('userId') userId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Quote[]> {
+    this.permissionHelper.checkPermission(userId, req.user);
+    return await this.quotesService.findByUserId(userId);
   }
 
   @ApiBearerAuth()

@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import * as basicAuth from 'express-basic-auth';
-import { TimeoutInterceptor } from './timeout-intercepter';
+// import { TimeoutInterceptor } from './timeout-intercepter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -31,10 +31,10 @@ async function bootstrap() {
   );
 
   const { httpAdapter } = app.get(HttpAdapterHost);
+
+  // app.useGlobalInterceptors(new TimeoutInterceptor(10000));
+
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
-  // const timeoutInMillis =
-  //   configService.get<number>('TIMEOUT_IN_MILLIS') || 5000;
-  // app.useGlobalInterceptors(new TimeoutInterceptor(timeoutInMillis));
 
   // Swagger configuration
   const config = new DocumentBuilder()

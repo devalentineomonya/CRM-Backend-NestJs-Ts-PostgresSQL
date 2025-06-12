@@ -1,62 +1,110 @@
 import { parentPort, workerData } from 'worker_threads';
 import { faker } from '@faker-js/faker';
-import { AdminActivityLog, Admin } from './index';
+import { DataSource } from 'typeorm';
+import { WorkerPayload } from './worker-data.types';
+import { Admin, AdminActivityLog } from './index';
 
-function generateAdminLogs(admins: Admin[]) {
-  const logs: AdminActivityLog[] = [];
+async function generateAdminLogs(workerId: string, dbConfig: any) {
+  console.log(`Worker ${workerId} starting database connection...`);
+  type GeneratedAdminLog = Omit<AdminActivityLog, 'log_id'>;
+  const dataSource = new DataSource({
+    ...dbConfig,
+    entities: [__dirname + '/../**/*.entity.{ts,js}'],
+    synchronize: false,
+    logging: false,
+  });
 
-  // Process admins in chunks to avoid memory issues
-  const chunkSize = 500;
-  for (
-    let adminIndex = 0;
-    adminIndex < admins.length;
-    adminIndex += chunkSize
-  ) {
-    const adminChunk = admins.slice(adminIndex, adminIndex + chunkSize);
+  try {
+    if (!dataSource.isInitialized) {
+      console.log(`Worker ${workerId} initializing database connection...`);
+      await dataSource.initialize();
+      console.log(`Worker ${workerId} database connection established`);
+    }
 
-    adminChunk.forEach((admin) => {
-      // Reduce the number of logs per admin to avoid too much data
-      const logCount = faker.number.int({ min: 50, max: 200 });
+    const adminRepository = dataSource.getRepository(Admin);
+    const admins = await adminRepository.find();
 
-      for (let i = 0; i < logCount; i++) {
-        logs.push({
-          log_id: faker.string.uuid(),
-          action_type: faker.helpers.arrayElement([
-            'CREATE',
-            'UPDATE',
-            'DELETE',
-          ]),
-          action_details: faker.lorem.sentence(),
-          ip_address: faker.internet.ipv4(),
-          target_entity: faker.helpers.arrayElement([
-            'User',
-            'Ticket',
-            'Quote',
-          ]),
-          target_id: faker.number.int({ min: 1000, max: 9999 }),
-          action_time: faker.date.recent(),
-          admin_id: admin.admin_id,
-          admin: admin,
-        } as AdminActivityLog);
-      }
-    });
+    if (!admins.length) {
+      throw new Error('No admins found in database');
+    }
 
-    // Log progress
-    if (parentPort) {
+    console.log(`Worker ${workerId} processing ${admins.length} admins`);
+    const logs: GeneratedAdminLog[] = [];
+
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < admins.length; i += CHUNK_SIZE) {
+      const chunkAdmins = admins.slice(i, i + CHUNK_SIZE);
+
+      chunkAdmins.forEach((admin) => {
+        const logCount = faker.number.int({ min: 2, max: 3 });
+        for (let j = 0; j < logCount; j++) {
+          logs.push({
+            action_type: faker.helpers.arrayElement([
+              'CREATE',
+              'UPDATE',
+              'DELETE',
+            ]),
+            action_details: faker.lorem.sentence(),
+            action_time: faker.date.recent({ days: 30 }),
+            ip_address: faker.internet.ipv4(),
+            target_entity: faker.helpers.arrayElement([
+              'User',
+              'Ticket',
+              'Quote',
+            ]),
+            target_id: faker.number.int({ min: 1000, max: 9999 }),
+            admin,
+          });
+        }
+      });
+
       console.log(
-        `Processed ${Math.min(adminIndex + chunkSize, admins.length)}/${admins.length} admins`,
+        `Worker ${workerId}: Processed chunk ${i / CHUNK_SIZE + 1}/${Math.ceil(admins.length / CHUNK_SIZE)}`,
       );
     }
-  }
 
-  return logs;
+    console.log(
+      `Worker ${workerId} saving ${logs.length} admin logs to database...`,
+    );
+    await dataSource.transaction(async (transactionalEntityManager) => {
+      await transactionalEntityManager
+        .getRepository(AdminActivityLog)
+        .insert(logs);
+    });
+
+    console.log(
+      `Worker ${workerId} completed. Generated ${logs.length} admin logs`,
+    );
+    return logs;
+  } finally {
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
+      console.log(`Worker ${workerId} database connection closed`);
+    }
+  }
 }
 
+// Worker execution
 try {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
-  const result = generateAdminLogs(workerData.admins);
-  parentPort?.postMessage(result);
-} catch (error) {
-  console.error('Worker error:', error);
-  process.exit(1);
+  const { workerId, dbConfig }: WorkerPayload = workerData as WorkerPayload;
+
+  if (!workerId || !dbConfig) {
+    throw new Error('Missing required worker data: workerId or dbConfig');
+  }
+
+  generateAdminLogs(workerId, dbConfig)
+    .then((logs) => {
+      // Return only count instead of full objects
+      parentPort?.postMessage({ count: logs.length });
+    })
+    .catch((error) => {
+      console.error(`Worker ${workerId} error:`, error);
+      parentPort?.postMessage({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
+} catch (error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  console.error(`Worker initialization error:`, error);
+  parentPort?.postMessage({ error: errorMessage });
 }

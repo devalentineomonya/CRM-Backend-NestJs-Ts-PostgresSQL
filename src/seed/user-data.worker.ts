@@ -1,125 +1,225 @@
 import { parentPort, workerData } from 'worker_threads';
 import { faker } from '@faker-js/faker';
-import { User, Profile, Quote, UserVisit, Ticket, Admin } from './index';
+import { DataSource } from 'typeorm';
+import { WorkerPayload } from './worker-data.types';
 
-function generateUserData(users: User[], admins: Admin[]) {
-  const profiles: Profile[] = [];
-  const quotes: Quote[] = [];
-  const visits: UserVisit[] = [];
-  const tickets: Ticket[] = [];
+import { User, Admin, Profile, Quote, Ticket, UserVisit } from './index';
 
-  // Process users in smaller chunks to avoid memory issues
-  const chunkSize = 1000;
-  for (let userIndex = 0; userIndex < users.length; userIndex += chunkSize) {
-    const userChunk = users.slice(userIndex, userIndex + chunkSize);
+// Omit the auto-generated ID columns as they are not needed for creation.
+type GeneratedProfile = Omit<Profile, 'profile_id'>;
+type GeneratedQuote = Omit<Quote, 'quote_id'>;
+type GeneratedVisit = Omit<UserVisit, 'visit_id'>;
+type GeneratedTicket = Omit<Ticket, 'ticket_id'>;
 
-    userChunk.forEach((user) => {
-      // Generate profile (1 per user)
-      profiles.push({
-        profile_id: faker.string.uuid(),
-        address: faker.location.streetAddress(),
-        city: faker.location.city(),
-        state: faker.location.state(),
-        country: faker.location.country(),
-        zip_code: faker.location.zipCode(),
-        preferred_language: 'en',
-        date_of_birth: faker.date.past({ years: 30 }),
-        social_media_links: [faker.internet.url(), faker.internet.url()],
-        user_id: user.user_id,
-        user: user, // Include the required 'user' property
-      } as Profile);
+async function generateUserData(workerId: string, dbConfig: any) {
+  console.log(`Worker ${workerId} starting database connection...`);
 
-      // Generate quotes (reduce the number per user to avoid too much data)
-      const quoteCount = faker.number.int({ min: 50, max: 150 });
-      for (let i = 0; i < quoteCount; i++) {
-        quotes.push({
-          quote_id: faker.string.uuid(),
-          quote_details: faker.lorem.paragraph(),
-          status: faker.helpers.arrayElement([
-            'pending',
-            'approved',
-            'rejected',
-            'expired',
-          ]),
-          requested_date: faker.date.recent({ days: 30 }),
-          estimated_cost: parseFloat(
-            faker.number
-              .float({
-                min: 100,
-                max: 5000,
-                fractionDigits: 2,
-              })
-              .toFixed(2),
-          ),
-          user: user,
-          attachments: [faker.internet.url(), faker.internet.url()],
-          user_id: user.user_id,
-          valid_until: faker.date.future({ years: 1 }),
-          quote_type: faker.helpers.arrayElement(['standard', 'custom']),
-          updated_at: new Date(),
-        } as Quote);
+  const dataSource = new DataSource({
+    ...dbConfig,
+    entities: [__dirname + '/../**/*.entity.{ts,js}'],
+    synchronize: false,
+    logging: false,
+  });
+
+  try {
+    // Initialize the data source.
+    try {
+      if (!dataSource.isInitialized) {
+        console.log(`Worker ${workerId} initializing database connection...`);
+        await dataSource.initialize();
+        console.log(`Worker ${workerId} database connection established.`);
       }
+    } catch (initError) {
+      console.error(`Worker ${workerId} failed to initialize DB:`, initError);
+      throw initError; // Propagate the error to stop execution.
+    }
 
-      // Generate visits (reduce the number per user)
-      const visitCount = faker.number.int({ min: 20, max: 80 });
-      for (let i = 0; i < visitCount; i++) {
-        visits.push({
-          visit_id: faker.string.uuid(),
-          ip_address: faker.internet.ipv4(),
-          user_agent: faker.internet.userAgent(),
-          device_type: faker.helpers.arrayElement([
-            'Mobile',
-            'Tablet',
-            'Desktop',
-          ]),
-          user_id: user.user_id,
-          visit_time: faker.date.recent({ days: 60 }),
-          user: user, // Include the required 'user' property
-        } as UserVisit);
+    const userRepository = dataSource.getRepository(User);
+    const adminRepository = dataSource.getRepository(Admin);
+    const profileRepository = dataSource.getRepository(Profile);
+
+    const existingProfileUserIds = (
+      await profileRepository
+        .createQueryBuilder('profile')
+        .select('profile.user_id', 'user_id')
+        .getRawMany()
+    ).map((p: { user_id: string }) => p.user_id);
+
+    const existingProfileIdsSet = new Set(existingProfileUserIds);
+    console.log(
+      `Worker ${workerId} found ${existingProfileIdsSet.size} existing profiles.`,
+    );
+
+    const users = await userRepository.find();
+    const admins = await adminRepository.find();
+
+    if (!users.length || !admins.length) {
+      throw new Error(
+        'No users or admins found in database. Cannot seed data.',
+      );
+    }
+
+    console.log(`Worker ${workerId} processing ${users.length} users...`);
+
+    const profiles: GeneratedProfile[] = [];
+    const quotes: GeneratedQuote[] = [];
+    const visits: GeneratedVisit[] = [];
+    const tickets: GeneratedTicket[] = [];
+
+    let skippedProfiles = 0;
+
+    const CHUNK_SIZE = 500;
+    for (let i = 0; i < users.length; i += CHUNK_SIZE) {
+      const chunkUsers = users.slice(i, i + CHUNK_SIZE);
+
+      chunkUsers.forEach((user) => {
+        if (!existingProfileIdsSet.has(user.user_id)) {
+          profiles.push({
+            address: faker.location.streetAddress(),
+            city: faker.location.city(),
+            state: faker.location.state(),
+            country: faker.location.country(),
+            zip_code: faker.location.zipCode(),
+            preferred_language: 'en',
+            date_of_birth: faker.date.past({ years: 30, refDate: new Date() }),
+            social_media_links: [faker.internet.url(), faker.internet.url()],
+            user: user,
+          });
+        } else {
+          skippedProfiles++;
+        }
+
+        const quoteCount = faker.number.int({ min: 200, max: 500 });
+        for (let q = 0; q < quoteCount; q++) {
+          quotes.push({
+            quote_details: faker.lorem.paragraph(),
+            status: faker.helpers.arrayElement([
+              'pending',
+              'approved',
+              'rejected',
+            ]),
+            requested_date: faker.date.recent({ days: 30 }),
+            estimated_cost: parseFloat(
+              faker.finance.amount({ min: 10000, max: 500000 }),
+            ),
+            user: user,
+            attachments: [faker.internet.url(), faker.internet.url()],
+            valid_until: faker.date.future({ years: 1 }),
+            quote_type: faker.helpers.arrayElement(['standard', 'custom']),
+            updated_at: new Date(),
+          });
+        }
+
+        const visitCount = faker.number.int({ min: 400, max: 600 });
+        for (let v = 0; v < visitCount; v++) {
+          visits.push({
+            ip_address: faker.internet.ipv4(),
+            user_agent: faker.internet.userAgent(),
+            device_type: faker.helpers.arrayElement([
+              'Mobile',
+              'Tablet',
+              'Desktop',
+            ]),
+            visit_time: faker.date.recent({ days: 60 }),
+            user,
+          });
+        }
+
+        const ticketCount = faker.number.int({ min: 300, max: 600 });
+        for (let t = 0; t < ticketCount; t++) {
+          tickets.push({
+            issue: faker.lorem.sentence(),
+            ticket_status: faker.helpers.arrayElement([
+              'open',
+              'in-progress',
+              'closed',
+            ]),
+            resolved_date: faker.datatype.boolean({ probability: 0.3 })
+              ? faker.date.recent()
+              : null,
+            priority_level: faker.helpers.arrayElement([
+              'low',
+              'medium',
+              'high',
+            ]),
+            assigned_admin: faker.helpers.arrayElement(admins),
+            created_date: faker.date.recent(),
+            user,
+          });
+        }
+      });
+
+      console.log(
+        `Worker ${workerId}: Processed chunk ${i / CHUNK_SIZE + 1}/${Math.ceil(users.length / CHUNK_SIZE)}`,
+      );
+    }
+
+    console.log(`Worker ${workerId} saving data to the database...`);
+    await dataSource.transaction(async (transactionalEntityManager) => {
+      if (profiles.length > 0) {
+        await transactionalEntityManager
+          .getRepository(Profile)
+          .insert(profiles);
       }
-
-      // Generate tickets (reduce the number per user)
-      const ticketCount = faker.number.int({ min: 10, max: 50 });
-      for (let i = 0; i < ticketCount; i++) {
-        const assignedAdmin = faker.helpers.arrayElement(admins);
-        tickets.push({
-          ticket_id: faker.string.uuid(),
-          issue: faker.lorem.sentence(),
-          ticket_status: faker.helpers.arrayElement([
-            'open',
-            'in-progress',
-            'closed',
-          ]),
-          resolved_date: faker.datatype.boolean(0.3)
-            ? faker.date.recent()
-            : null,
-          priority_level: faker.helpers.arrayElement(['low', 'medium', 'high']),
-          user_id: user.user_id,
-          assigned_to: assignedAdmin.admin_id,
-          created_date: faker.date.recent(),
-          user: user, // Include the required 'user' property
-          assigned_admin: assignedAdmin, // Include the required 'assigned_admin' property
-        } as Ticket);
+      if (quotes.length > 0) {
+        await transactionalEntityManager.getRepository(Quote).insert(quotes);
+      }
+      if (visits.length > 0) {
+        await transactionalEntityManager
+          .getRepository(UserVisit)
+          .insert(visits);
+      }
+      if (tickets.length > 0) {
+        await transactionalEntityManager.getRepository(Ticket).insert(tickets);
       }
     });
 
-    // Log progress
-    if (parentPort) {
+    const summary = {
+      profiles: profiles.length,
+      quotes: quotes.length,
+      visits: visits.length,
+      tickets: tickets.length,
+      skippedProfiles,
+    };
+
+    console.log(`Worker ${workerId} completed successfully.`, summary);
+    return { success: true, ...summary };
+  } finally {
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
+      console.log(`Worker ${workerId} database connection closed.`);
+    } else {
       console.log(
-        `Processed ${Math.min(userIndex + chunkSize, users.length)}/${users.length} users`,
+        `Worker ${workerId} did not establish a database connection.`,
       );
     }
   }
-
-  return { profiles, quotes, visits, tickets };
 }
 
-// Process data and send result to main thread
 try {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
-  const result = generateUserData(workerData.users, workerData.admins);
-  parentPort?.postMessage(result);
-} catch (error) {
-  console.error('Worker error:', error);
-  process.exit(1);
+  const { workerId, dbConfig }: WorkerPayload = workerData as WorkerPayload;
+
+  if (!workerId || !dbConfig) {
+    throw new Error('Missing required worker data: workerId or dbConfig');
+  }
+
+  generateUserData(workerId, dbConfig)
+    .then((result) => parentPort?.postMessage(result))
+    .catch((error) => {
+      console.error(
+        `Worker ${workerId} encountered an unhandled error:`,
+        error,
+      );
+      parentPort?.postMessage({
+        error:
+          error instanceof Error
+            ? error.message
+            : 'An unknown error occurred in the worker.',
+      });
+    });
+} catch (error: unknown) {
+  const errorMessage =
+    error instanceof Error ? error.message : 'Unknown initialization error';
+  console.error('Worker initialization failed:', error);
+  parentPort?.postMessage({ error: errorMessage });
 }

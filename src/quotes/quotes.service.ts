@@ -80,6 +80,18 @@ export class QuoteService {
     return quote;
   }
 
+  async findByUserId(userId: string): Promise<Quote[]> {
+    const quotes = await this.quoteRepository.find({
+      where: { user: { user_id: userId } },
+      relations: ['user'],
+    });
+
+    if (!quotes || quotes.length === 0) {
+      throw new NotFoundException(`No quotes found for user with ID ${userId}`);
+    }
+    return quotes;
+  }
+
   async update(id: string, updateQuote: UpdateQuote): Promise<Quote> {
     const quote = await this.findOne(id);
     const updated = this.quoteRepository.merge(quote, updateQuote);

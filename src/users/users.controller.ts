@@ -24,6 +24,7 @@ import { PermissionHelper } from 'src/shared/helpers/permission.helper';
 import { RequestWithUser } from 'src/shared/types/request.types';
 import { UpdateAccountTypeDto } from './dto/update-account-type.dto';
 import { UpdateUserStatusDto } from './dto/update-status.dto';
+import { UpdateEmailDto } from './dto/update-user-email.dto';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('users')
@@ -83,6 +84,16 @@ export class UserController {
   @Patch('status')
   async updateStatus(@Body() updateStatusDto: UpdateUserStatusDto) {
     return this.userService.updateStatus(updateStatusDto);
+  }
+
+  @Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Patch('update-email/:userId')
+  async updateUserEmail(
+    @Body() email: UpdateEmailDto,
+    @Param('userId') userId: string,
+  ) {
+    return this.userService.updateEmail(userId, email);
   }
 
   @Roles(Role.SUPER_ADMIN)

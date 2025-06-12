@@ -64,7 +64,7 @@ export class AuthController {
     this.permissionHelper.checkPermission(id, req.user);
     return this.authService.signOut(id, req.user.userType as 'admin' | 'user');
   }
-
+  @Public()
   @UseGuards(RefreshTokenGuard)
   @Get('refresh/:id')
   refreshToken(@Param('id') id: string, @Req() req: RequestWithUser) {

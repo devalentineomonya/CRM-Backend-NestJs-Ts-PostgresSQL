@@ -11,7 +11,7 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { TicketFilterDto } from './dto/filter-ticket.dto';
 import { TicketStatusDto } from './dto/ticket-status.dto';
 import { TicketPriorityDto } from './dto/priority.dto';
-import { AssignAdminDto } from './dto/assign--to-admin.dto';
+import { AssignAdminDto } from './dto/assign-to-admin.dto';
 import { User } from 'src/users/entities/user.entity';
 import { Admin } from 'src/admins/entities/admin.entity';
 import { MailService } from 'src/shared/mail/mail.service';
@@ -165,26 +165,22 @@ export class TicketsService {
     return ticket;
   }
 
+  async findByUserId(userId: string): Promise<Ticket[]> {
+    const ticket = await this.ticketRepository.find({
+      where: { user: { user_id: userId } },
+      relations: ['user', 'assigned_admin'],
+    });
+
+    if (!ticket) {
+      throw new NotFoundException(`Ticket with ID ${userId} not found`);
+    }
+    return ticket;
+  }
+
   async update(id: string, updateTicketDto: UpdateTicketDto): Promise<Ticket> {
     const ticket = await this.findOne(id);
 
-    let assigned_admin = ticket.assigned_admin;
-    if (updateTicketDto.assigned_to) {
-      const admin = await this.adminRepository.findOne({
-        where: { admin_id: updateTicketDto.assigned_to },
-      });
-      if (!admin) {
-        throw new NotFoundException(
-          `Admin with ID ${updateTicketDto.assigned_to} not found`,
-        );
-      }
-      assigned_admin = admin;
-    }
-
-    const updated = this.ticketRepository.merge(ticket, {
-      ...updateTicketDto,
-      assigned_admin,
-    });
+    const updated = this.ticketRepository.merge(ticket, updateTicketDto);
 
     return this.ticketRepository.save(updated);
   }

@@ -48,6 +48,7 @@ export class AuthService {
         .createQueryBuilder('user')
         .addSelect('user.password')
         .where('user.email = :email', { email })
+
         .getOne();
     } else if (userType === 'admin') {
       repository = this.adminRepository;
@@ -72,6 +73,12 @@ export class AuthService {
     }
 
     if (userType === 'user') {
+      if (entity instanceof User && entity.status === 'inactive') {
+        throw new BadRequestException(
+          'Your account is inactive. Kindly check your email for the activation link',
+        );
+      }
+
       await this.recordUserVisit(entity as User, ipAddress, userAgent);
     }
 
@@ -256,15 +263,15 @@ export class AuthService {
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.get<string>(
+        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        expiresIn: this.configService.getOrThrow<string>(
           'JWT_ACCESS_EXPIRES_IN',
           '15m',
         ),
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>(
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.getOrThrow<string>(
           'JWT_REFRESH_EXPIRES_IN',
           '7d',
         ),
@@ -278,7 +285,7 @@ export class AuthService {
     const payload: { sub: string; userType: string } = this.jwtService.verify(
       refreshToken,
       {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       },
     );
 

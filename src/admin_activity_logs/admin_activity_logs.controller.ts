@@ -19,6 +19,7 @@ export class AdminActivityLogsController {
     };
 
     return this.logsService.createLog(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       mockAdmin as any,
       createAdminActivityLogDto,
     );

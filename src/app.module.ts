@@ -19,11 +19,11 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 import { SeedModule } from './seed/seed.module';
-import { MetricsCronModule } from './crons/metrics-cron.module';
+// import { MetricsCronModule } from './crons/metrics-cron.module';
 
 @Module({
   imports: [
-    MetricsCronModule,
+    // MetricsCronModule,
     UsersModule,
     ProfileModule,
     QuotesModule,

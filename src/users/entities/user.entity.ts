@@ -63,6 +63,9 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: true, select: false })
   hashed_refresh_token: string | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  hashed_email_verification_token: string | null;
+
   @OneToOne(() => Profile, (profile) => profile.user)
   profile: Profile;
 

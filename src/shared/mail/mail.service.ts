@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
-
 import { ConfigService } from '@nestjs/config';
 import {
   MFAEmail,
@@ -35,6 +34,7 @@ export class MailService {
     props: MFAEmailProps,
   ): Promise<nodemailer.SentMessageInfo> {
     const html = MFAEmail({ ...props });
+    console.log(html);
     return this.sendEmail(to, 'Your MFA Code', html);
   }
 
@@ -43,6 +43,7 @@ export class MailService {
     resetLink: string,
   ): Promise<nodemailer.SentMessageInfo> {
     const html = ResetPasswordEmail({ resetLink });
+    console.log(html);
     return this.sendEmail(to, 'Reset Your Password', html);
   }
 
