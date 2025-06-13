@@ -2,14 +2,37 @@ import { parentPort, workerData } from 'worker_threads';
 import { faker } from '@faker-js/faker';
 import { DataSource } from 'typeorm';
 import { WorkerPayload } from './worker-data.types';
-
 import { User, Admin, Profile, Quote, Ticket, UserVisit } from './index';
 
-// Omit the auto-generated ID columns as they are not needed for creation.
-type GeneratedProfile = Omit<Profile, 'profile_id'>;
-type GeneratedQuote = Omit<Quote, 'quote_id'>;
-type GeneratedVisit = Omit<UserVisit, 'visit_id'>;
-type GeneratedTicket = Omit<Ticket, 'ticket_id'>;
+type GeneratedProfile = Omit<Profile, 'profile_id' | 'user'> & {
+  user_id: string;
+};
+type GeneratedQuote = Omit<Quote, 'quote_id' | 'user'> & { user_id: string };
+type GeneratedVisit = Omit<UserVisit, 'visit_id' | 'user'> & {
+  user_id: string;
+};
+type GeneratedTicket = Omit<Ticket, 'ticket_id' | 'user' | 'assigned_admin'> & {
+  user_id: string;
+  assigned_admin_id: string;
+};
+
+const CHUNK_INSERT_SIZE = 500;
+
+async function chunkInsert<T>(
+  repository: any,
+  data: T[],
+  label: string,
+  workerId: string,
+) {
+  for (let i = 0; i < data.length; i += CHUNK_INSERT_SIZE) {
+    const chunk = data.slice(i, i + CHUNK_INSERT_SIZE);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    await repository.insert(chunk);
+    console.log(
+      `Worker ${workerId} inserted ${label} chunk ${i / CHUNK_INSERT_SIZE + 1}`,
+    );
+  }
+}
 
 async function generateUserData(workerId: string, dbConfig: any) {
   console.log(`Worker ${workerId} starting database connection...`);
@@ -22,44 +45,28 @@ async function generateUserData(workerId: string, dbConfig: any) {
   });
 
   try {
-    // Initialize the data source.
-    try {
-      if (!dataSource.isInitialized) {
-        console.log(`Worker ${workerId} initializing database connection...`);
-        await dataSource.initialize();
-        console.log(`Worker ${workerId} database connection established.`);
-      }
-    } catch (initError) {
-      console.error(`Worker ${workerId} failed to initialize DB:`, initError);
-      throw initError; // Propagate the error to stop execution.
+    if (!dataSource.isInitialized) {
+      await dataSource.initialize();
+      console.log(`Worker ${workerId} connected to DB.`);
     }
 
-    const userRepository = dataSource.getRepository(User);
-    const adminRepository = dataSource.getRepository(Admin);
-    const profileRepository = dataSource.getRepository(Profile);
+    const userRepo = dataSource.getRepository(User);
+    const adminRepo = dataSource.getRepository(Admin);
+    const profileRepo = dataSource.getRepository(Profile);
 
-    const existingProfileUserIds = (
-      await profileRepository
-        .createQueryBuilder('profile')
-        .select('profile.user_id', 'user_id')
-        .getRawMany()
-    ).map((p: { user_id: string }) => p.user_id);
+    const existingProfiles = await profileRepo
+      .createQueryBuilder('profile')
+      .select('profile.user_id', 'user_id')
+      .getRawMany();
 
-    const existingProfileIdsSet = new Set(existingProfileUserIds);
-    console.log(
-      `Worker ${workerId} found ${existingProfileIdsSet.size} existing profiles.`,
-    );
-
-    const users = await userRepository.find();
-    const admins = await adminRepository.find();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access
+    const existingUserIds = new Set(existingProfiles.map((p) => p.user_id));
+    const users = await userRepo.find({ take: 1500 });
+    const admins = await adminRepo.find({ take: 1500 });
 
     if (!users.length || !admins.length) {
-      throw new Error(
-        'No users or admins found in database. Cannot seed data.',
-      );
+      throw new Error('No users or admins found in DB. Cannot seed data.');
     }
-
-    console.log(`Worker ${workerId} processing ${users.length} users...`);
 
     const profiles: GeneratedProfile[] = [];
     const quotes: GeneratedQuote[] = [];
@@ -67,13 +74,15 @@ async function generateUserData(workerId: string, dbConfig: any) {
     const tickets: GeneratedTicket[] = [];
 
     let skippedProfiles = 0;
+    const CHUNK_SIZE = 200;
 
-    const CHUNK_SIZE = 500;
     for (let i = 0; i < users.length; i += CHUNK_SIZE) {
       const chunkUsers = users.slice(i, i + CHUNK_SIZE);
 
       chunkUsers.forEach((user) => {
-        if (!existingProfileIdsSet.has(user.user_id)) {
+        const userId = user.user_id;
+
+        if (!existingUserIds.has(userId)) {
           profiles.push({
             address: faker.location.streetAddress(),
             city: faker.location.city(),
@@ -81,15 +90,18 @@ async function generateUserData(workerId: string, dbConfig: any) {
             country: faker.location.country(),
             zip_code: faker.location.zipCode(),
             preferred_language: 'en',
-            date_of_birth: faker.date.past({ years: 30, refDate: new Date() }),
+            date_of_birth: faker.date.past({ years: 30 }),
             social_media_links: [faker.internet.url(), faker.internet.url()],
-            user: user,
+            user_id: userId,
           });
         } else {
           skippedProfiles++;
         }
 
         const quoteCount = faker.number.int({ min: 200, max: 500 });
+        const visitCount = faker.number.int({ min: 400, max: 600 });
+        const ticketCount = faker.number.int({ min: 300, max: 600 });
+
         for (let q = 0; q < quoteCount; q++) {
           quotes.push({
             quote_details: faker.lorem.paragraph(),
@@ -100,17 +112,16 @@ async function generateUserData(workerId: string, dbConfig: any) {
             ]),
             requested_date: faker.date.recent({ days: 30 }),
             estimated_cost: parseFloat(
-              faker.finance.amount({ min: 10000, max: 500000 }),
+              faker.finance.amount({ min: 100, max: 500 }),
             ),
-            user: user,
             attachments: [faker.internet.url(), faker.internet.url()],
             valid_until: faker.date.future({ years: 1 }),
             quote_type: faker.helpers.arrayElement(['standard', 'custom']),
             updated_at: new Date(),
+            user_id: userId,
           });
         }
 
-        const visitCount = faker.number.int({ min: 400, max: 600 });
         for (let v = 0; v < visitCount; v++) {
           visits.push({
             ip_address: faker.internet.ipv4(),
@@ -121,12 +132,13 @@ async function generateUserData(workerId: string, dbConfig: any) {
               'Desktop',
             ]),
             visit_time: faker.date.recent({ days: 60 }),
-            user,
+            user_id: userId,
           });
         }
 
-        const ticketCount = faker.number.int({ min: 300, max: 600 });
         for (let t = 0; t < ticketCount; t++) {
+          const assignedAdmin =
+            admins[faker.number.int({ min: 0, max: admins.length - 1 })];
           tickets.push({
             issue: faker.lorem.sentence(),
             ticket_status: faker.helpers.arrayElement([
@@ -142,37 +154,48 @@ async function generateUserData(workerId: string, dbConfig: any) {
               'medium',
               'high',
             ]),
-            assigned_admin: faker.helpers.arrayElement(admins),
             created_date: faker.date.recent(),
-            user,
+            user_id: userId,
+            assigned_admin_id: assignedAdmin.admin_id,
           });
         }
       });
 
       console.log(
-        `Worker ${workerId}: Processed chunk ${i / CHUNK_SIZE + 1}/${Math.ceil(users.length / CHUNK_SIZE)}`,
+        `Worker ${workerId} processed chunk ${i / CHUNK_SIZE + 1}/${Math.ceil(users.length / CHUNK_SIZE)}`,
       );
     }
 
-    console.log(`Worker ${workerId} saving data to the database...`);
-    await dataSource.transaction(async (transactionalEntityManager) => {
-      if (profiles.length > 0) {
-        await transactionalEntityManager
-          .getRepository(Profile)
-          .insert(profiles);
-      }
-      if (quotes.length > 0) {
-        await transactionalEntityManager.getRepository(Quote).insert(quotes);
-      }
-      if (visits.length > 0) {
-        await transactionalEntityManager
-          .getRepository(UserVisit)
-          .insert(visits);
-      }
-      if (tickets.length > 0) {
-        await transactionalEntityManager.getRepository(Ticket).insert(tickets);
-      }
-    });
+    console.log(`Worker ${workerId} saving data in chunks...`);
+    const manager = dataSource.manager;
+    if (profiles.length)
+      await chunkInsert(
+        manager.getRepository(Profile),
+        profiles,
+        'profiles',
+        workerId,
+      );
+    if (quotes.length)
+      await chunkInsert(
+        manager.getRepository(Quote),
+        quotes,
+        'quotes',
+        workerId,
+      );
+    if (visits.length)
+      await chunkInsert(
+        manager.getRepository(UserVisit),
+        visits,
+        'visits',
+        workerId,
+      );
+    if (tickets.length)
+      await chunkInsert(
+        manager.getRepository(Ticket),
+        tickets,
+        'tickets',
+        workerId,
+      );
 
     const summary = {
       profiles: profiles.length,
@@ -182,16 +205,12 @@ async function generateUserData(workerId: string, dbConfig: any) {
       skippedProfiles,
     };
 
-    console.log(`Worker ${workerId} completed successfully.`, summary);
+    console.log(`Worker ${workerId} completed.`, summary);
     return { success: true, ...summary };
   } finally {
     if (dataSource.isInitialized) {
       await dataSource.destroy();
       console.log(`Worker ${workerId} database connection closed.`);
-    } else {
-      console.log(
-        `Worker ${workerId} did not establish a database connection.`,
-      );
     }
   }
 }
@@ -206,20 +225,15 @@ try {
   generateUserData(workerId, dbConfig)
     .then((result) => parentPort?.postMessage(result))
     .catch((error) => {
-      console.error(
-        `Worker ${workerId} encountered an unhandled error:`,
-        error,
-      );
+      console.error(`Worker ${workerId} error:`, error);
       parentPort?.postMessage({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'An unknown error occurred in the worker.',
+        error: error instanceof Error ? error.message : 'Unknown worker error.',
       });
     });
 } catch (error: unknown) {
-  const errorMessage =
-    error instanceof Error ? error.message : 'Unknown initialization error';
   console.error('Worker initialization failed:', error);
-  parentPort?.postMessage({ error: errorMessage });
+  parentPort?.postMessage({
+    error:
+      error instanceof Error ? error.message : 'Unknown initialization error',
+  });
 }

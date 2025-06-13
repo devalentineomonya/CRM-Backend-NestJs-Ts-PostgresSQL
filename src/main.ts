@@ -7,11 +7,13 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import * as basicAuth from 'express-basic-auth';
 // import { TimeoutInterceptor } from './timeout-intercepter';
+import { PrometheusController } from '@willsoto/nestjs-prometheus';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
+  Reflect.defineMetadata('isPublic', true, PrometheusController);
   app.use(helmet());
 
   // Enable CORS
@@ -79,6 +81,7 @@ async function bootstrap() {
       showRequestDuration: true,
       tryItOutEnabled: true,
     },
+
     customSiteTitle: 'CRM System API Documentation',
     customCss: '.topbar { display: none; }',
   });

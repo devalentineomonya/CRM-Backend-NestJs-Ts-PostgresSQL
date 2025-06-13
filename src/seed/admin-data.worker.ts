@@ -6,7 +6,9 @@ import { Admin, AdminActivityLog } from './index';
 
 async function generateAdminLogs(workerId: string, dbConfig: any) {
   console.log(`Worker ${workerId} starting database connection...`);
-  type GeneratedAdminLog = Omit<AdminActivityLog, 'log_id'>;
+  type GeneratedAdminLog = Omit<AdminActivityLog, 'log_id' | 'admin'> & {
+    admin_id: string;
+  };
   const dataSource = new DataSource({
     ...dbConfig,
     entities: [__dirname + '/../**/*.entity.{ts,js}'],
@@ -22,7 +24,9 @@ async function generateAdminLogs(workerId: string, dbConfig: any) {
     }
 
     const adminRepository = dataSource.getRepository(Admin);
-    const admins = await adminRepository.find();
+    const admins = await adminRepository.find({
+      take: 500,
+    });
 
     if (!admins.length) {
       throw new Error('No admins found in database');
@@ -53,7 +57,7 @@ async function generateAdminLogs(workerId: string, dbConfig: any) {
               'Quote',
             ]),
             target_id: faker.number.int({ min: 1000, max: 9999 }),
-            admin,
+            admin_id: admin.admin_id,
           });
         }
       });

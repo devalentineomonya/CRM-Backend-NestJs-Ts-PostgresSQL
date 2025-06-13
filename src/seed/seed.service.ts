@@ -41,7 +41,7 @@ export class SeedService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      await this.createBaseEntities();
+      // await this.createBaseEntities();
 
       // Get database configuration from environment
       const dbConfig = {
@@ -196,7 +196,7 @@ export class SeedService {
     const createAdmins = async () => {
       const admins: Admin[] = [];
       const adminBatchSize = 500;
-      const totalAdmins = 50000;
+      const totalAdmins = 5000;
 
       for (let i = 0; i < totalAdmins; i += adminBatchSize) {
         const batch = Array.from(

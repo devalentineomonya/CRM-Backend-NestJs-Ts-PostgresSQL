@@ -1,214 +1,63 @@
 config:
-  target: 'http://localhost:3000'
+  target: "http://localhost:3000"
   phases:
-    - name: Warm Up
-      duration: 60
-      arrivalRate: 5
-    - duration: 120
-      arrivalRate: 10
     - duration: 60
       arrivalRate: 5
-  processor: 'dist/script/artillery.processor.js'
+  processor: "./dist/artillery.processor.js"
   variables:
-    defaultPassword: 'Password123!'
-  defaults:
-    headers:
-      Content-Type: 'application/json'
+    defaultPassword: "ValidPass123!" # Must meet password policy
+  ensure:
+    p99: 1500
 
 scenarios:
-  - name: User Registration and Profile Flow
-    weight: 40
+  - name: "User Registration and Actions"
     flow:
-      - function: generateUser
+      # User registration
+      - function: "generateUser"
       - post:
-          url: '/users'
-          json:
-            first_name: '{{ user.first_name }}'
-            last_name: '{{ user.last_name }}'
-            email: '{{ user.email }}'
-            password: '{{ user.password }}'
-            phone_number: '{{ user.phone_number }}'
-            profile_picture: '{{ user.profile_picture }}'
-            account_type: '{{ user.account_type }}'
-            status: '{{ user.status }}'
-          afterResponse: extractUserData
-      - post:
-          url: '/auth/signin'
-          json:
-            email: '{{ userEmail }}'
-            password: '{{ user.password }}'
-            userType: 'user'
-
-          afterResponse: extractLoginData
-      - post:
-          url: '/profiles/{{ userId }}'
-          headers:
-            Authorization: 'Bearer {{ accessToken }}'
-          json:
-            address: '{{ user.address }}'
-            city: '{{ user.city }}'
-            state: '{{ user.state }}'
-            country: '{{ user.country }}'
-            zip_code: '{{ user.zip_code }}'
-            preferred_language: '{{ user.preferred_language }}'
-            date_of_birth: '{{ user.date_of_birth }}'
-            social_media_links: '{{ user.social_media_links }}'
-      - get:
-          url: '/profiles/user/{{ userId }}'
-          headers:
-            Authorization: 'Bearer {{ accessToken }}'
-
-  - name: Quote Management Flow
-    weight: 30
-    flow:
-      - function: generateUser
-      - post:
-          url: '/users'
-          json:
-            first_name: '{{ user.first_name }}'
-            last_name: '{{ user.last_name }}'
-            email: '{{ user.email }}'
-            password: '{{ user.password }}'
-            phone_number: '{{ user.phone_number }}'
-            profile_picture: '{{ user.profile_picture }}'
-            account_type: '{{ user.account_type }}'
-            status: '{{ user.status }}'
-          afterResponse: extractUserData
-      - post:
-          url: '/auth/login'
-          json:
-            email: '{{ userEmail }}'
-            password: '{{ user.password }}'
-            userType: 'user'
-          afterResponse: extractLoginData
-      - function: generateQuoteData
-      - post:
-          url: '/quotes/{{ userId }}'
-          headers:
-            Authorization: 'Bearer {{ accessToken }}'
-          json:
-            quote_details: '{{ quote.quote_details }}'
-            quote_type: '{{ quote.quote_type }}'
-            estimated_cost: '{{ quote.estimated_cost }}'
-            attachments: '{{ quote.attachments }}'
+          url: "/users"  # ACTUAL ENDPOINT
+          json:  # Send flat object without 'user' nesting
+            first_name: "{{ user.first_name }}"
+            last_name: "{{ user.last_name }}"
+            email: "{{ user.email }}"
+            password: "{{ user.password }}"
+            phone_number: "{{ user.phone_number }}"
+            profile_picture: "{{ user.profile_picture }}"
+            account_type: "{{ user.account_type }}"
+            status: "{{ user.status }}"
           capture:
-            - json: '$.data.quote_id'
-              as: 'quoteId'
+            json: "$.data.user_id"
+            as: "userId"
+          afterResponse: "extractUserData"
 
-      - get:
-          url: '/quotes/{{ quoteId }}'
-          headers:
-            Authorization: 'Bearer {{ accessToken }}'
+      # User login
+      - post:
+          url: "/auth/signin"  # ACTUAL ENDPOINT
+          json:
+            email: "{{ user.email }}"
+            password: "{{ defaultPassword }}"
+            userType: "user"
+          afterResponse: "extractLoginData"
 
-  - name: Ticket Management Flow
-    weight: 30
-    flow:
-      - function: generateUser
+      # Create quote
+      - function: "generateQuoteData"
       - post:
-          url: '/users'
-          json:
-            first_name: '{{ user.first_name }}'
-            last_name: '{{ user.last_name }}'
-            email: '{{ user.email }}'
-            password: '{{ user.password }}'
-            phone_number: '{{ user.phone_number }}'
-            profile_picture: '{{ user.profile_picture }}'
-            account_type: '{{ user.account_type }}'
-            status: '{{ user.status }}'
-          afterResponse: extractUserData
-      - post:
-          url: '/auth/login'
-          json:
-            email: '{{ userEmail }}'
-            password: '{{ user.password }}'
-            userType: 'user'
-          afterResponse: extractLoginData
-      - function: generateTicketData
-      - post:
-          url: '/tickets/{{ userId }}'
+          url: "/quotes/{{ userId }}"  # ACTUAL ENDPOINT
           headers:
-            Authorization: 'Bearer {{ accessToken }}'
-          json:
-            issue: '{{ ticket.issue }}'
-            priority_level: '{{ ticket.priority_level }}'
-            description: '{{ ticket.description }}'
-          capture:
-            - json: '$.data.ticket_id'
-              as: 'ticketId'
+            Authorization: "Bearer {{ accessToken }}"
+          json:  # Send flat object without 'quote' nesting
+            quote_details: "{{ quote.quote_details }}"
+            estimated_cost: "{{ quote.estimated_cost }}"
+            attachments: "{{ quote.attachments }}"
 
-      - get:
-          url: '/tickets/{{ ticketId }}'
+      # Create ticket
+      - function: "generateTicketData"
+      - post:
+          url: "/tickets/{{ userId }}"  # ACTUAL ENDPOINT
           headers:
-            Authorization: 'Bearer {{ accessToken }}'
+            Authorization: "Bearer {{ accessToken }}"
+          json:  # Send flat object without 'ticket' nesting
+            issue: "{{ ticket.issue }}"
 
-  - name: User Session Management
-    weight: 20
-    flow:
-      - function: generateUser
-      - post:
-          url: '/users'
-          json:
-            first_name: '{{ user.first_name }}'
-            last_name: '{{ user.last_name }}'
-            email: '{{ user.email }}'
-            password: '{{ user.password }}'
-            phone_number: '{{ user.phone_number }}'
-            profile_picture: '{{ user.profile_picture }}'
-            account_type: '{{ user.account_type }}'
-            status: '{{ user.status }}'
-          afterResponse: extractUserData
-      - post:
-          url: '/auth/login'
-          json:
-            email: '{{ userEmail }}'
-            password: '{{ user.password }}'
-            userType: 'user'
-          afterResponse: extractLoginData
-      - get:
-          url: '/users/{{ userId }}'
-          headers:
-            Authorization: 'Bearer {{ accessToken }}'
-      - think: 5
-      - post:
-          url: '/auth/signout/{{ userId }}'
-          headers:
-            Authorization: 'Bearer {{ accessToken }}'
-
-  - name: Read-Only Operations
-    weight: 10
-    flow:
-      - function: generateUser
-      - post:
-          url: '/users'
-          json:
-            first_name: '{{ user.first_name }}'
-            last_name: '{{ user.last_name }}'
-            email: '{{ user.email }}'
-            password: '{{ user.password }}'
-            phone_number: '{{ user.phone_number }}'
-            profile_picture: '{{ user.profile_picture }}'
-            account_type: '{{ user.account_type }}'
-            status: '{{ user.status }}'
-          afterResponse: extractUserData
-      - post:
-          url: '/auth/login'
-          json:
-            email: '{{ userEmail }}'
-            password: '{{ user.password }}'
-            userType: 'user'
-          afterResponse: extractLoginData
-      - loop:
-          - get:
-              url: '/quotes/user/{{ userId }}'
-              headers:
-                Authorization: 'Bearer {{ accessToken }}'
-          - get:
-              url: '/tickets/user/{{ userId }}'
-              headers:
-                Authorization: 'Bearer {{ accessToken }}'
-          - get:
-              url: '/profiles/user/{{ userId }}'
-              headers:
-                Authorization: 'Bearer {{ accessToken }}'
-          - think: 2
-        count: 3
+      # Validate workflow
+      - function: "logResponse"

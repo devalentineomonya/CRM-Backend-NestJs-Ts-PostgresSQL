@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: crm-system-metrics
+  name: crm-system-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crm_system_metrics
+  template:
+    metadata:
+      labels:
+        app: crm_system_metrics
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: /metrics
+        prometheus.io/port: '3000'
+    spec:
+      containers:
+        - image: crm-system
+          name: crm-system
+          ports:
+            - containerPort: 5000

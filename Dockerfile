@@ -1,46 +1,30 @@
 ARG NODE_VERSION=22.15.0
 ARG PNPM_VERSION=10.11.0
 
-FROM node:${NODE_VERSION}-alpine AS base
+# Use Node.js 20 Alpine as base image
+FROM node:${NODE_VERSION}-alpine
 
-# Create non-root user with dedicated group
-RUN addgroup -S nodejs && adduser -S nestJs -G nodejs
 
-WORKDIR /usr/src/app
+# Install pnpm globally
+RUN npm install -g pnpm@${PNPM_VERSION}
 
-# Install pnpm with cache
-RUN --mount=type=cache,target=/root/.npm \
-    npm install -g pnpm@${PNPM_VERSION}
+# Set working directory
+WORKDIR /app
 
-# Copy only dependency files first
-COPY package.json pnpm-lock.yaml ./
+# Create applogs directory for logging
+RUN mkdir -p /app/applogs
 
-# Install dependencies with separate production stage
-FROM base AS deps
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --prod --frozen-lockfile
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Build stage
-FROM base AS build
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
 COPY . .
-RUN pnpm run build
 
-# Final image
-FROM base AS final
-ENV NODE_ENV=production
+# Expose port
+EXPOSE 8000
 
-# Copy production dependencies and build output
-COPY --from=deps /usr/src/app/node_modules ./node_modules
-COPY --from=build /usr/src/app/dist ./dist
-COPY package.json .
-
-# Set ownership and permissions
-RUN chown -R nestJs:nodejs . && \
-    chmod -R 755 . && \
-    chmod g+s .
-
-USER nestJs
-EXPOSE 3000
-CMD ["pnpm", "start"]
+# Start the application in development mode
+CMD ["pnpm", "run", "start:dev"]

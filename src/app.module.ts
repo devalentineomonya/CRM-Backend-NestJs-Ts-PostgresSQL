@@ -22,7 +22,9 @@ import { SeedModule } from './seed/seed.module';
 // import { MetricsCronModule } from './crons/metrics-cron.module';
 import { createKeyv, Keyv } from '@keyv/redis';
 import { CacheableMemory } from 'cacheable';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+// import { APP_INTERCEPTOR } from '@nestjs/core';
+import { TestController } from './cache.test.controller';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 
 @Module({
   imports: [
@@ -44,7 +46,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
       isGlobal: true,
       useFactory: (configService: ConfigService) => {
         return {
-          ttl: 60000,
+          ttl: 60,
           stores: [
             new Keyv({
               store: new CacheableMemory({ ttl: 30000, lruSize: 5000 }),
@@ -55,7 +57,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
       },
     }),
     ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
+      imports: [ConfigModule, PrometheusModule.register()],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => [
         {
@@ -67,11 +69,11 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
     SeedModule,
   ],
 
-  controllers: [WelcomeController],
+  controllers: [WelcomeController, TestController],
   providers: [
     ContactHelper,
     {
-      provide: APP_INTERCEPTOR,
+      provide: 'APP_INTERCEPTOR',
       useClass: CacheInterceptor,
     },
     {
