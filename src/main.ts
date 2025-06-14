@@ -8,24 +8,28 @@ import helmet from 'helmet';
 import * as basicAuth from 'express-basic-auth';
 import { TimeoutInterceptor } from './timeout-intercepter';
 import { PrometheusController } from '@willsoto/nestjs-prometheus';
-import { WinstonModule } from 'nest-winston';
-import * as winston from 'winston';
-import 'winston-daily-rotate-file';
+// import { WinstonModule } from 'nest-winston';
+// import * as winston from 'winston';
+// import 'winston-daily-rotate-file';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    logger: WinstonModule.createLogger({
-      transports: [
-        new winston.transports.Console(),
-        new winston.transports.DailyRotateFile({
-          filename: 'logs/application-%DATE%.log',
-          datePattern: 'YYYY-MM-DD',
-          zippedArchive: true,
-          maxSize: '20m',
-        }),
-      ],
-    }),
-  });
+  const app = await NestFactory.create(
+    AppModule,
+    //   ,
+    //   {
+    //   logger: WinstonModule.createLogger({
+    //     transports: [
+    //       new winston.transports.Console(),
+    //       new winston.transports.DailyRotateFile({
+    //         filename: 'logs/application-%DATE%.log',
+    //         datePattern: 'YYYY-MM-DD',
+    //         zippedArchive: true,
+    //         maxSize: '20m',
+    //       }),
+    //     ],
+    //   }),
+    // }
+  );
   const configService = app.get(ConfigService);
 
   Reflect.defineMetadata('isPublic', true, PrometheusController);

@@ -13,8 +13,8 @@ import {
   Profile,
 } from './index';
 import { faker } from '@faker-js/faker';
-import { WorkerPayload } from './worker-data.types';
-import { ConfigService } from '@nestjs/config'; // Add this import
+import { WorkerPayload, WorkerResult } from './worker-data.types';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SeedService {
@@ -73,7 +73,7 @@ export class SeedService {
           users.map((u) => u.user_id),
           admins.map((a) => a.admin_id),
         ),
-        this.runWorkerForEntity<{ logs: number }>(
+        this.runWorkerForEntity<{ 'admin-logs': number }>(
           'admin-logs',
           dbConfig,
           admins.map((a) => a.admin_id),
@@ -88,27 +88,50 @@ export class SeedService {
       let totalLogs = 0;
 
       workerResults.forEach((result, i) => {
-        const entities = [
-          'Profiles',
-          'Quotes',
-          'Visits',
-          'Tickets',
-          'Admin Logs',
+        const entityTypes = [
+          'profiles',
+          'quotes',
+          'visits',
+          'tickets',
+          'admin-logs',
         ];
+
         if (result.status === 'fulfilled') {
           const data = result.value;
-          this.logger.log(
-            `${entities[i]} worker completed: ${JSON.stringify(data)}`,
-          );
+          this.logger.log(`Worker completed: ${JSON.stringify(data)}`);
 
-          // Aggregate counts
-          if ('profiles' in data) totalProfiles = data.profiles;
-          if ('quotes' in data) totalQuotes = data.quotes;
-          if ('visits' in data) totalVisits = data.visits;
-          if ('tickets' in data) totalTickets = data.tickets;
-          if ('logs' in data) totalLogs = data.logs;
+          const entityType = entityTypes[i];
+          if (data && data[entityType]) {
+            const count = data[entityType] as number;
+
+            if (count !== undefined) {
+              switch (i) {
+                case 0:
+                  totalProfiles = count;
+                  break;
+                case 1:
+                  totalQuotes = count;
+                  break;
+                case 2:
+                  totalVisits = count;
+                  break;
+                case 3:
+                  totalTickets = count;
+                  break;
+                case 4:
+                  totalLogs = count;
+                  break;
+              }
+            } else {
+              this.logger.warn(
+                `Missing count for ${entityType} in worker results`,
+              );
+            }
+          } else {
+            this.logger.warn(`Worker result missing 'counts' property`);
+          }
         } else {
-          this.logger.error(`${entities[i]} worker failed: ${result.reason}`);
+          this.logger.error(`Worker failed: ${result.reason}`);
         }
       });
 
@@ -119,27 +142,26 @@ export class SeedService {
       this.logger.log(`- Visits: ${totalVisits}`);
       this.logger.log(`- Tickets: ${totalTickets}`);
       this.logger.log(`- Admin Logs: ${totalLogs}`);
+      return {
+        success: true,
+        message: 'Database seeding completed successfully',
+        counts: {
+          profiles: totalProfiles,
+          quotes: totalQuotes,
+          visits: totalVisits,
+          tickets: totalTickets,
+          adminLogs: totalLogs,
+        },
+      };
     } catch (error: unknown) {
-      this.logger.error('Seeding failed', (error as Error).stack);
-      throw error;
+      const err = error as Error;
+      this.logger.error('Seeding failed', err.stack);
+      return {
+        success: false,
+        message: 'Database seeding failed',
+        error: err.message,
+      };
     }
-  }
-
-  private runWorkerForEntity<T>(
-    entityType: 'profiles' | 'quotes' | 'visits' | 'tickets' | 'admin-logs',
-    dbConfig: WorkerPayload['dbConfig'],
-    userIds?: string[],
-    adminIds?: string[],
-  ): Promise<T> {
-    const workerId = `${entityType}-${Math.random().toString(36).substring(7)}`;
-    this.logger.log(`Starting ${entityType} worker ${workerId}`);
-
-    return this.runWorker<T>(join(__dirname, `${entityType}.worker.js`), {
-      dbConfig,
-      workerId,
-      userIds,
-      adminIds,
-    });
   }
 
   private async createBaseEntities() {
@@ -147,8 +169,8 @@ export class SeedService {
 
     const createUsers = async () => {
       const users: User[] = [];
-      const userBatchSize = 5;
-      const totalUsers = 5;
+      const userBatchSize = 100;
+      const totalUsers = 10000;
 
       for (let i = 0; i < totalUsers; i += userBatchSize) {
         const batch = Array.from(
@@ -182,8 +204,8 @@ export class SeedService {
 
     const createAdmins = async () => {
       const admins: Admin[] = [];
-      const adminBatchSize = 5;
-      const totalAdmins = 5;
+      const adminBatchSize = 100;
+      const totalAdmins = 800;
 
       for (let i = 0; i < totalAdmins; i += adminBatchSize) {
         const batch = Array.from(
@@ -223,39 +245,116 @@ export class SeedService {
   private runWorker<T>(path: string, workerData: WorkerPayload): Promise<T> {
     return new Promise((resolve, reject) => {
       const worker = new Worker(path, { workerData });
+      let settled = false;
 
-      worker.on('message', (data: { error?: string }) => {
-        if (data.error) {
-          this.logger.error(
-            `Worker error: ${workerData.workerId || 'unknown'}`,
-            data.error,
-          );
-          reject(new Error(data.error));
-        } else {
-          this.logger.log(
-            `Worker completed: ${workerData.workerId || 'unknown'}`,
-          );
-          resolve(data as T);
+      worker.on('message', (data: WorkerResult) => {
+        if (settled) return;
+
+        // Handle error messages
+        if (data.type === 'error' || data.status === 'error') {
+          settled = true;
+          const errorMsg = data.error || data.message || 'Unknown error';
+          this.logger.error(`Worker ${workerData.workerId} error: ${errorMsg}`);
+          reject(new Error(errorMsg));
+          return;
         }
+
+        // Handle progress messages (both formats)
+        if (data.type === 'progress' || data.status === 'progress') {
+          const message =
+            data.message ||
+            (data.usersProcessed !== undefined
+              ? `Processed ${data.usersProcessed}/${data.totalUsers}`
+              : data.adminsProcessed !== undefined
+                ? `Processed ${data.adminsProcessed}/${data.totalAdmins}`
+                : 'Progress update');
+          this.logger.log(`[${workerData.workerId}] ${message}`);
+          return;
+        }
+
+        // Handle chunk messages
+        if (data.status === 'chunk') {
+          this.logger.log(
+            `[${workerData.workerId}] Processed chunk of ${data.chunkSize} records`,
+          );
+          return;
+        }
+
+        // Handle completion via count property
+        if ('count' in data) {
+          settled = true;
+          this.logger.log(`Worker completed: ${workerData.workerId}`);
+          resolve({ [workerData.entityType]: data.count } as T);
+          return;
+        }
+
+        // Handle direct result objects
+        if (
+          'profiles' in data ||
+          'quotes' in data ||
+          'visits' in data ||
+          'tickets' in data ||
+          'logs' in data
+        ) {
+          settled = true;
+          this.logger.log(`Worker completed: ${workerData.workerId}`);
+          resolve(data as T);
+          return;
+        }
+
+        // Handle new format completion
+        if (data.type === 'done') {
+          settled = true;
+          this.logger.log(`Worker completed: ${workerData.workerId}`);
+          resolve(data.counts as T);
+          return;
+        }
+
+        this.logger.warn(
+          `Unknown message format from worker ${workerData.workerId}:`,
+          data,
+        );
       });
 
       worker.on('error', (error) => {
-        this.logger.error(
-          `Worker error: ${workerData.workerId || 'unknown'}`,
-          error,
-        );
+        if (settled) return;
+        settled = true;
+        this.logger.error(`Worker error: ${workerData.workerId}`, error);
         reject(error);
       });
 
       worker.on('exit', (code) => {
+        if (settled) return;
+        settled = true;
+
         if (code !== 0) {
-          const error = new Error(
-            `Worker ${workerData.workerId || 'unknown'} stopped with exit code ${code}`,
-          );
-          this.logger.error(error.message);
-          reject(error);
+          const errorMsg = `Worker ${workerData.workerId} exited with code ${code}`;
+          this.logger.error(errorMsg);
+          reject(new Error(errorMsg));
+        } else {
+          const errorMsg = `Worker ${workerData.workerId} exited without sending done message`;
+          this.logger.error(errorMsg);
+          reject(new Error(errorMsg));
         }
       });
+    });
+  }
+
+  private runWorkerForEntity<T>(
+    entityType: 'profiles' | 'quotes' | 'visits' | 'tickets' | 'admin-logs',
+    dbConfig: WorkerPayload['dbConfig'],
+    userIds?: string[],
+    adminIds?: string[],
+  ): Promise<T> {
+    const workerId = `${entityType}-${Math.random().toString(36).substring(7)}`;
+    this.logger.log(`Starting ${entityType} worker ${workerId}`);
+
+    return this.runWorker<T>(join(__dirname, `${entityType}.worker.js`), {
+      dbConfig,
+      workerId,
+      entityType,
+      userIds,
+      adminIds,
     });
   }
 }

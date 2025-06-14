@@ -1,10 +1,10 @@
 import { parentPort, workerData } from 'worker_threads';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { faker } from '@faker-js/faker';
-import { Profile } from './index';
-import { WorkerPayload } from './worker-data.types';
+import { Profile } from '../index';
+import { WorkerPayload } from '../worker-data.types';
 
-const CHUNK_SIZE = 5;
+const CHUNK_SIZE = 100;
 type GeneratedProfile = Omit<Profile, 'profile_id' | 'user'> & {
   user_id: string;
 };
@@ -36,7 +36,14 @@ export async function generateProfiles(
           state: faker.location.state(),
           country: faker.location.country(),
           zip_code: faker.location.zipCode(),
-          preferred_language: 'en',
+          preferred_language: faker.helpers.arrayElement([
+            'en',
+            'es',
+            'fr',
+            'de',
+            'sw',
+            'other',
+          ]),
           date_of_birth: faker.date.past({ years: 30 }),
           social_media_links: [faker.internet.url(), faker.internet.url()],
           user_id: userId,
@@ -56,29 +63,27 @@ export async function generateProfiles(
       await profileRepo.insert(profiles.slice(i, i + CHUNK_SIZE));
     }
 
-    return { profiles: profiles.length };
+    return profiles.length;
   } finally {
     await dataSource.destroy();
   }
 }
 
-(async () => {
+void (async () => {
   try {
-    const { workerId, dbConfig, userIds }: WorkerPayload =
+    const { workerId, dbConfig, userIds, entityType }: WorkerPayload =
       workerData as WorkerPayload;
     const result = await generateProfiles(workerId, dbConfig, userIds);
-    parentPort?.postMessage(result);
+
+    parentPort?.postMessage({
+      type: 'done',
+      counts: { [entityType]: result },
+    });
   } catch (error) {
     parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
     });
   }
-})()
-  .then((result) => parentPort?.postMessage(result))
-  .catch((error) => {
-    parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
-    });
-  });
+})();

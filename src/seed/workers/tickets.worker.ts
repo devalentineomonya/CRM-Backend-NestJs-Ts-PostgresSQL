@@ -1,10 +1,10 @@
 import { parentPort, workerData } from 'worker_threads';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { faker } from '@faker-js/faker';
-import { Ticket } from './index';
-import { WorkerPayload } from './worker-data.types';
+import { Ticket } from '../index';
+import { WorkerPayload } from '../worker-data.types';
 
-const CHUNK_SIZE = 2;
+const CHUNK_SIZE = 100;
 type GeneratedTicket = Omit<Ticket, 'ticket_id' | 'user' | 'assigned_admin'> & {
   user_id: string;
   assigned_admin_id: string;
@@ -31,7 +31,7 @@ async function generateTickets(
     const totalUsers = userIds.length;
 
     userIds.forEach((userId) => {
-      const ticketCount = faker.number.int({ min: 3, max: 6 });
+      const ticketCount = faker.number.int({ min: 300, max: 600 });
 
       for (let t = 0; t < ticketCount; t++) {
         const assignedAdminId =
@@ -78,29 +78,27 @@ async function generateTickets(
       });
     }
 
-    return { count: tickets.length };
+    return tickets.length;
   } finally {
     await dataSource.destroy();
   }
 }
 
-(async () => {
+void (async () => {
   try {
-    const { workerId, dbConfig, userIds, adminIds }: WorkerPayload =
+    const { workerId, dbConfig, userIds, adminIds, entityType }: WorkerPayload =
       workerData as WorkerPayload;
     const result = await generateTickets(workerId, dbConfig, userIds, adminIds);
-    parentPort?.postMessage(result);
+
+    parentPort?.postMessage({
+      type: 'done',
+      counts: { [entityType]: result },
+    });
   } catch (error) {
     parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
     });
   }
-})()
-  .then((result) => parentPort?.postMessage(result))
-  .catch((error) => {
-    parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
-    });
-  });
+})();

@@ -27,7 +27,11 @@ export class Profile {
   @Column({ type: 'varchar', length: 10, nullable: true })
   zip_code: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'en' })
+  @Column({
+    type: 'enum',
+    enum: ['en', 'es', 'fr', 'de', 'sw', 'other'],
+    default: 'en',
+  })
   preferred_language: string;
 
   @Column({ type: 'date', nullable: true })

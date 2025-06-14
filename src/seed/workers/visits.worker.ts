@@ -1,10 +1,10 @@
 import { parentPort, workerData } from 'worker_threads';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { faker } from '@faker-js/faker';
-import { UserVisit } from './index';
-import { WorkerPayload } from './worker-data.types';
+import { UserVisit } from '../index';
+import { WorkerPayload } from '../worker-data.types';
 
-const CHUNK_SIZE = 2;
+const CHUNK_SIZE = 50;
 type GeneratedVisit = Omit<UserVisit, 'visit_id' | 'user'> & {
   user_id: string;
 };
@@ -27,7 +27,7 @@ async function generateVisits(
     const totalUsers = userIds.length;
 
     userIds.forEach((userId) => {
-      const visitCount = faker.number.int({ min: 4, max: 6 });
+      const visitCount = faker.number.int({ min: 400, max: 600 });
 
       for (let v = 0; v < visitCount; v++) {
         visits.push({
@@ -67,29 +67,27 @@ async function generateVisits(
       });
     }
 
-    return { count: visits.length };
+    return visits.length;
   } finally {
     await dataSource.destroy();
   }
 }
 
-(async () => {
+void (async () => {
   try {
-    const { workerId, dbConfig, userIds }: WorkerPayload =
+    const { workerId, dbConfig, userIds, entityType }: WorkerPayload =
       workerData as WorkerPayload;
     const result = await generateVisits(workerId, dbConfig, userIds);
-    parentPort?.postMessage(result);
+
+    parentPort?.postMessage({
+      type: 'done',
+      counts: { [entityType]: result },
+    });
   } catch (error) {
     parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
     });
   }
-})()
-  .then((result) => parentPort?.postMessage(result))
-  .catch((error) => {
-    parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
-    });
-  });
+})();

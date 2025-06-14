@@ -1,10 +1,10 @@
 import { parentPort, workerData } from 'worker_threads';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { faker } from '@faker-js/faker';
-import { Quote } from './index';
-import { WorkerPayload } from './worker-data.types';
+import { Quote } from '../index';
+import { WorkerPayload } from '../worker-data.types';
 
-const CHUNK_SIZE = 2;
+const CHUNK_SIZE = 50;
 type GeneratedQuote = Omit<Quote, 'quote_id' | 'user'> & { user_id: string };
 
 async function generateQuotes(
@@ -26,7 +26,7 @@ async function generateQuotes(
     const totalUsers = userIds.length;
 
     userIds.forEach((userId) => {
-      const quoteCount = faker.number.int({ min: 2, max: 5 });
+      const quoteCount = faker.number.int({ min: 200, max: 500 });
 
       for (let q = 0; q < quoteCount; q++) {
         quotes.push({
@@ -72,29 +72,27 @@ async function generateQuotes(
       });
     }
 
-    return { count: quotes.length };
+    return quotes.length;
   } finally {
     await dataSource.destroy();
   }
 }
 
-(async () => {
+void (async () => {
   try {
-    const { workerId, dbConfig, userIds }: WorkerPayload =
+    const { workerId, dbConfig, userIds, entityType }: WorkerPayload =
       workerData as WorkerPayload;
     const result = await generateQuotes(workerId, dbConfig, userIds);
-    parentPort?.postMessage(result);
+
+    parentPort?.postMessage({
+      type: 'done',
+      counts: { [entityType]: result },
+    });
   } catch (error) {
     parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
     });
   }
-})()
-  .then((result) => parentPort?.postMessage(result))
-  .catch((error) => {
-    parentPort?.postMessage({
-      error: error instanceof Error ? error.message : 'An error occurred ',
-      stack: error instanceof Error ? error.stack : 'Unknown stack',
-    });
-  });
+})();

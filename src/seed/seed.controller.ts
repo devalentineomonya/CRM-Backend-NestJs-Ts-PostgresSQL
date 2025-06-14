@@ -1,4 +1,4 @@
-import { Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Controller, Post } from '@nestjs/common';
 import { SeedService } from './seed.service';
 import { Public } from 'src/auth/decorators/public.decorators';
 
@@ -8,7 +8,6 @@ export class SeedController {
 
   @Public()
   @Post()
-  @HttpCode(HttpStatus.OK)
   async seed() {
     await this.seedService.seed();
   }
