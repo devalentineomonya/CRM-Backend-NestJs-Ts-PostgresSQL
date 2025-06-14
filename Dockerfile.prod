@@ -5,6 +5,8 @@
 
   WORKDIR /app
 
+  RUN mkdir -p /app/logs
+
   COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
   RUN pnpm install --frozen-lockfile
 

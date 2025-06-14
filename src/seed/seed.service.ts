@@ -35,15 +35,10 @@ export class SeedService {
 
   async seed() {
     this.logger.log('Starting database seeding');
-    const queryRunner = this.dataSource.createQueryRunner();
 
     try {
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
+      const { users, admins } = await this.createBaseEntities();
 
-      // await this.createBaseEntities();
-
-      // Get database configuration from environment
       const dbConfig = {
         type: 'postgres',
         host: this.configService.get<string>('DATABASE_HOST'),
@@ -51,108 +46,100 @@ export class SeedService {
         username: this.configService.get<string>('DATABASE_USER'),
         password: this.configService.get<string>('DATABASE_PASSWORD'),
         database: this.configService.get<string>('DATABASE_DB'),
+        ...(this.configService.get<string>('NODE_ENV') === 'production'
+          ? { ssl: true }
+          : {}),
       };
 
-      const workerId = Math.random().toString(36).substring(7);
-      this.logger.log(`Starting user data worker ${workerId}`);
-
-      const [userDataResult, adminLogsResult] = await Promise.allSettled([
-        this.runWorker<{
-          success: boolean;
-          profiles: number;
-          quotes: number;
-          visits: number;
-          tickets: number;
-        }>(join(__dirname, 'user-data.worker.js'), {
+      const workerResults = await Promise.allSettled([
+        this.runWorkerForEntity<{ profiles: number }>(
+          'profiles',
           dbConfig,
-          workerId,
-        }),
-        this.runWorker<Omit<AdminActivityLog, 'log_id'>[]>(
-          join(__dirname, 'admin-data.worker.js'),
-          {
-            dbConfig,
-            workerId: Math.random().toString(36).substring(7),
-          },
+          users.map((u) => u.user_id),
+        ),
+        this.runWorkerForEntity<{ quotes: number }>(
+          'quotes',
+          dbConfig,
+          users.map((u) => u.user_id),
+        ),
+        this.runWorkerForEntity<{ visits: number }>(
+          'visits',
+          dbConfig,
+          users.map((u) => u.user_id),
+        ),
+        this.runWorkerForEntity<{ tickets: number }>(
+          'tickets',
+          dbConfig,
+          users.map((u) => u.user_id),
+          admins.map((a) => a.admin_id),
+        ),
+        this.runWorkerForEntity<{ logs: number }>(
+          'admin-logs',
+          dbConfig,
+          admins.map((a) => a.admin_id),
         ),
       ]);
 
-      // Handle user data worker result
-      if (userDataResult.status === 'fulfilled') {
-        const userData = userDataResult.value;
-        if (userData.success) {
-          this.logger.log(`Worker ${workerId} completed. Generated:`, {
-            profiles: userData.profiles,
-            quotes: userData.quotes,
-            visits: userData.visits,
-            tickets: userData.tickets,
-          });
+      // Process results
+      let totalProfiles = 0;
+      let totalQuotes = 0;
+      let totalVisits = 0;
+      let totalTickets = 0;
+      let totalLogs = 0;
+
+      workerResults.forEach((result, i) => {
+        const entities = [
+          'Profiles',
+          'Quotes',
+          'Visits',
+          'Tickets',
+          'Admin Logs',
+        ];
+        if (result.status === 'fulfilled') {
+          const data = result.value;
+          this.logger.log(
+            `${entities[i]} worker completed: ${JSON.stringify(data)}`,
+          );
+
+          // Aggregate counts
+          if ('profiles' in data) totalProfiles = data.profiles;
+          if ('quotes' in data) totalQuotes = data.quotes;
+          if ('visits' in data) totalVisits = data.visits;
+          if ('tickets' in data) totalTickets = data.tickets;
+          if ('logs' in data) totalLogs = data.logs;
         } else {
-          throw new Error('User data worker failed');
+          this.logger.error(`${entities[i]} worker failed: ${result.reason}`);
         }
-      } else {
-        this.logger.error(`Worker ${workerId} failed:`, userDataResult.reason);
-        throw new Error('User data worker failed');
-      }
+      });
 
-      // Handle admin logs worker result
-      if (adminLogsResult.status === 'fulfilled') {
-        const adminLogs = adminLogsResult.value;
-        this.logger.log(`Saved ${adminLogs.length} admin activity logs`);
-      } else {
-        this.logger.error(
-          'Failed to retrieve admin logs:',
-          adminLogsResult.reason,
-        );
-        throw new Error('Admin logs worker failed');
-      }
-
-      await queryRunner.commitTransaction();
-      this.logger.log('Database seeding completed successfully');
+      this.logger.log('Database seeding completed');
+      this.logger.log('Seeding summary:');
+      this.logger.log(`- Profiles: ${totalProfiles}`);
+      this.logger.log(`- Quotes: ${totalQuotes}`);
+      this.logger.log(`- Visits: ${totalVisits}`);
+      this.logger.log(`- Tickets: ${totalTickets}`);
+      this.logger.log(`- Admin Logs: ${totalLogs}`);
     } catch (error: unknown) {
-      await queryRunner.rollbackTransaction();
       this.logger.error('Seeding failed', (error as Error).stack);
       throw error;
-    } finally {
-      await queryRunner.release();
     }
   }
 
-  private cleanObject<T>(obj: T): T {
-    if (obj === null || typeof obj !== 'object') {
-      return obj;
-    }
+  private runWorkerForEntity<T>(
+    entityType: 'profiles' | 'quotes' | 'visits' | 'tickets' | 'admin-logs',
+    dbConfig: WorkerPayload['dbConfig'],
+    userIds?: string[],
+    adminIds?: string[],
+  ): Promise<T> {
+    const workerId = `${entityType}-${Math.random().toString(36).substring(7)}`;
+    this.logger.log(`Starting ${entityType} worker ${workerId}`);
 
-    if (Array.isArray(obj)) {
-      return obj.map((item: T) => this.cleanObject(item)) as unknown as T;
-    }
-
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (
-        key.startsWith('__') ||
-        [
-          'user',
-          'admin',
-          'assigned_admin',
-          'profile',
-          'quotes',
-          'tickets',
-          'visits',
-        ].includes(key)
-      ) {
-        continue;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const cleanedValue = this.cleanObject(value);
-      if (cleanedValue !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-        result[key] = cleanedValue;
-      }
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return result;
+    return this.runWorker<T>(join(__dirname, `${entityType}.worker.js`), {
+      dbConfig,
+      workerId,
+      userIds,
+      adminIds,
+    });
   }
 
   private async createBaseEntities() {
@@ -160,8 +147,8 @@ export class SeedService {
 
     const createUsers = async () => {
       const users: User[] = [];
-      const userBatchSize = 500;
-      const totalUsers = 50000;
+      const userBatchSize = 5;
+      const totalUsers = 5;
 
       for (let i = 0; i < totalUsers; i += userBatchSize) {
         const batch = Array.from(
@@ -195,8 +182,8 @@ export class SeedService {
 
     const createAdmins = async () => {
       const admins: Admin[] = [];
-      const adminBatchSize = 500;
-      const totalAdmins = 5000;
+      const adminBatchSize = 5;
+      const totalAdmins = 5;
 
       for (let i = 0; i < totalAdmins; i += adminBatchSize) {
         const batch = Array.from(

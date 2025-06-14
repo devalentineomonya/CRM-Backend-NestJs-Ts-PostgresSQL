@@ -13,15 +13,19 @@ export class TimeoutInterceptor implements NestInterceptor {
   constructor(private readonly timeoutInMillis: number) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const url = request.url;
+
+    if (url.includes('/seed')) {
+      return next.handle();
+    }
+
     return next.handle().pipe(
       timeout(this.timeoutInMillis),
       catchError((err: unknown) => {
-        // Only transform TimeoutError; let all other errors bubble up
         if (err instanceof TimeoutError) {
           throw new GatewayTimeoutException('Gateway timeout has occurred');
         }
-
-        // Re-throw original error for the global exception filter to handle
         throw err;
       }),
     );

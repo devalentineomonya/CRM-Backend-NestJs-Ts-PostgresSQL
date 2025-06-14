@@ -1,114 +1,103 @@
 import { parentPort, workerData } from 'worker_threads';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import { faker } from '@faker-js/faker';
-import { DataSource } from 'typeorm';
+import { AdminActivityLog } from './index';
 import { WorkerPayload } from './worker-data.types';
-import { Admin, AdminActivityLog } from './index';
 
-async function generateAdminLogs(workerId: string, dbConfig: any) {
-  console.log(`Worker ${workerId} starting database connection...`);
-  type GeneratedAdminLog = Omit<AdminActivityLog, 'log_id' | 'admin'> & {
-    admin_id: string;
-  };
+const CHUNK_SIZE = 2;
+type GeneratedLogs = Omit<AdminActivityLog, 'log_id' | 'admin'> & {
+  admin_id: string;
+};
+async function generateAdminLogs(
+  workerId: WorkerPayload['workerId'],
+  dbConfig: WorkerPayload['dbConfig'],
+  adminIds: WorkerPayload['adminIds'],
+) {
   const dataSource = new DataSource({
-    ...dbConfig,
+    ...(dbConfig as DataSourceOptions),
     entities: [__dirname + '/../**/*.entity.{ts,js}'],
     synchronize: false,
     logging: false,
   });
 
+  await dataSource.initialize();
+  if (!adminIds) return;
   try {
-    if (!dataSource.isInitialized) {
-      console.log(`Worker ${workerId} initializing database connection...`);
-      await dataSource.initialize();
-      console.log(`Worker ${workerId} database connection established`);
-    }
+    const logRepo = dataSource.getRepository(AdminActivityLog);
+    const logs: GeneratedLogs[] = [];
+    let adminsProcessed = 0;
+    const totalAdmins = adminIds.length;
 
-    const adminRepository = dataSource.getRepository(Admin);
-    const admins = await adminRepository.find({
-      take: 500,
+    adminIds.forEach((adminId) => {
+      const logCount = faker.number.int({ min: 2, max: 3 });
+
+      for (let j = 0; j < logCount; j++) {
+        logs.push({
+          action_type: faker.helpers.arrayElement([
+            'CREATE',
+            'UPDATE',
+            'DELETE',
+          ]),
+          action_details: faker.lorem.sentence(),
+          action_time: faker.date.recent({ days: 30 }),
+          ip_address: faker.internet.ipv4(),
+          target_entity: faker.helpers.arrayElement([
+            'User',
+            'Ticket',
+            'Quote',
+          ]),
+          target_id: faker.number.int({ min: 1000, max: 9999 }),
+          admin_id: adminId,
+        });
+      }
+
+      adminsProcessed++;
+
+      // Report progress every 100 admins
+      if (adminsProcessed % 100 === 0 || adminsProcessed === totalAdmins) {
+        parentPort?.postMessage({
+          status: 'progress',
+          adminsProcessed,
+          totalAdmins,
+          logsGenerated: logs.length,
+          workerId,
+        });
+      }
     });
 
-    if (!admins.length) {
-      throw new Error('No admins found in database');
-    }
-
-    console.log(`Worker ${workerId} processing ${admins.length} admins`);
-    const logs: GeneratedAdminLog[] = [];
-
-    const CHUNK_SIZE = 50;
-    for (let i = 0; i < admins.length; i += CHUNK_SIZE) {
-      const chunkAdmins = admins.slice(i, i + CHUNK_SIZE);
-
-      chunkAdmins.forEach((admin) => {
-        const logCount = faker.number.int({ min: 2, max: 3 });
-        for (let j = 0; j < logCount; j++) {
-          logs.push({
-            action_type: faker.helpers.arrayElement([
-              'CREATE',
-              'UPDATE',
-              'DELETE',
-            ]),
-            action_details: faker.lorem.sentence(),
-            action_time: faker.date.recent({ days: 30 }),
-            ip_address: faker.internet.ipv4(),
-            target_entity: faker.helpers.arrayElement([
-              'User',
-              'Ticket',
-              'Quote',
-            ]),
-            target_id: faker.number.int({ min: 1000, max: 9999 }),
-            admin_id: admin.admin_id,
-          });
-        }
-      });
-
-      console.log(
-        `Worker ${workerId}: Processed chunk ${i / CHUNK_SIZE + 1}/${Math.ceil(admins.length / CHUNK_SIZE)}`,
-      );
-    }
-
-    console.log(
-      `Worker ${workerId} saving ${logs.length} admin logs to database...`,
-    );
-    await dataSource.transaction(async (transactionalEntityManager) => {
-      await transactionalEntityManager
-        .getRepository(AdminActivityLog)
-        .insert(logs);
-    });
-
-    console.log(
-      `Worker ${workerId} completed. Generated ${logs.length} admin logs`,
-    );
-    return logs;
-  } finally {
-    if (dataSource.isInitialized) {
-      await dataSource.destroy();
-      console.log(`Worker ${workerId} database connection closed`);
-    }
-  }
-}
-
-// Worker execution
-try {
-  const { workerId, dbConfig }: WorkerPayload = workerData as WorkerPayload;
-
-  if (!workerId || !dbConfig) {
-    throw new Error('Missing required worker data: workerId or dbConfig');
-  }
-
-  generateAdminLogs(workerId, dbConfig)
-    .then((logs) => {
-      // Return only count instead of full objects
-      parentPort?.postMessage({ count: logs.length });
-    })
-    .catch((error) => {
-      console.error(`Worker ${workerId} error:`, error);
+    // Insert in chunks
+    for (let i = 0; i < logs.length; i += CHUNK_SIZE) {
+      await logRepo.insert(logs.slice(i, i + CHUNK_SIZE));
       parentPort?.postMessage({
-        error: error instanceof Error ? error.message : 'Unknown error',
+        status: 'chunk',
+        chunkSize: Math.min(CHUNK_SIZE, logs.length - i),
+        workerId,
       });
-    });
-} catch (error: unknown) {
-  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-  console.error(`Worker initialization error:`, error);
-  parentPort?.postMessage({ error: errorMessage });
+    }
+
+    return { count: logs.length };
+  } finally {
+    await dataSource.destroy();
+  }
 }
+
+(async () => {
+  try {
+    const { workerId, dbConfig, userIds }: WorkerPayload =
+      workerData as WorkerPayload;
+    const result = await generateAdminLogs(workerId, dbConfig, userIds);
+    parentPort?.postMessage(result);
+  } catch (error) {
+    parentPort?.postMessage({
+      error: error instanceof Error ? error.message : 'An error occurred ',
+      stack: error instanceof Error ? error.stack : 'Unknown stack',
+    });
+  }
+})()
+  .then((result) => parentPort?.postMessage(result))
+  .catch((error) => {
+    parentPort?.postMessage({
+      error: error instanceof Error ? error.message : 'An error occurred ',
+      stack: error instanceof Error ? error.stack : 'Unknown stack',
+    });
+  });

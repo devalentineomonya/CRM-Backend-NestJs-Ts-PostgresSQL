@@ -12,7 +12,7 @@ RUN npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /app
 
 # Create applogs directory for logging
-RUN mkdir -p /app/applogs
+RUN mkdir -p /app/logs
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
