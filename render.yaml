@@ -3,11 +3,8 @@ services:
   - type: web
     name: crm-backend
     env: docker
-    plan: free
-    dockerfilePath: ./Dockerfile
-    buildCommand: pnpm install && pnpm run build
+    dockerfilePath: ./Dockerfile.prod
     startCommand: node dist/main
-    autoDeploy: true
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -22,14 +19,12 @@ services:
   - type: background
     name: prometheus-monitor
     env: docker
-    plan: free
     dockerfilePath: ./prometheus.Dockerfile
     startCommand: "--config.file=/etc/prometheus/prometheus.yml"
 
   - type: web
     name: grafana-dashboard
     env: docker
-    plan: free
     dockerfilePath: ./grafana.Dockerfile
     startCommand: "/run.sh"
     envVars:
@@ -42,10 +37,6 @@ services:
     name: redis-cache
     plan: free
 
-
-# ------------------------------
-# databases
-# ------------------------------
 databases:
   - name: crm-db
     databaseName: crm_db
