@@ -38,7 +38,7 @@ services:
 
 databases:
   - name: crm-db
+    postgresMajorVersion: '17'
     databaseName: crm_db
     user: crm_user
     plan: free
-  plan: free
