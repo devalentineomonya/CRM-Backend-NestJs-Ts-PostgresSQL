@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@faker-js/faker':
+        specifier: ^9.8.0
+        version: 9.8.0
       '@keyv/redis':
         specifier: ^4.4.0
         version: 4.4.0(keyv@5.3.4)
@@ -108,9 +111,6 @@ importers:
       '@eslint/js':
         specifier: ^9.18.0
         version: 9.27.0
-      '@faker-js/faker':
-        specifier: ^9.8.0
-        version: 9.8.0
       '@nestjs/cli':
         specifier: ^11.0.0
         version: 11.0.7(@swc/cli@0.6.0(@swc/core@1.11.29)(chokidar@4.0.3))(@swc/core@1.11.29)(@types/node@22.15.21)
