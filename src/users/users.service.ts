@@ -14,8 +14,6 @@ import { UpdateUserStatusDto } from './dto/update-status.dto';
 import { MailService } from 'src/shared/mail/mail.service';
 import * as bcrypt from 'bcrypt';
 import { UpdateEmailDto } from './dto/update-user-email.dto';
-import { ResendOtpDto } from './dto/resend-otp.dto';
-import { ActivateWithOtpDto } from './dto/activate-with-otp.dto';
 
 @Injectable()
 export class UserService {
@@ -136,41 +134,33 @@ export class UserService {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
 
-    // Check if new email is different
     if (user.email === updateEmailDto.email) {
       throw new BadRequestException(
         'New email must be different from current email',
       );
     }
 
-    // Generate and save OTP
     const verificationCode = this.generateSecureOtp();
     const hashedVerificationToken = await bcrypt.hash(verificationCode, 12);
 
-    // Update user details
     user.email = updateEmailDto.email;
     user.hashed_email_verification_token = hashedVerificationToken;
     user.status = 'inactive';
     await this.userRepository.save(user);
 
-    // Send verification email
     await this.sendOtpEmail(user.email, verificationCode, 'email-verification');
 
     return { success: true, message: 'Verification email sent successfully' };
   }
 
   async resendOtp(
-    resendOtpDto: ResendOtpDto,
+    email: string,
   ): Promise<{ success: boolean; message: string }> {
-    const { identifier, identifierType } = resendOtpDto;
+    // const { email } = resendOtpDto;
 
-    // Find user by email or user ID
     const where: FindOptionsWhere<User> = {};
-    if (identifierType === 'email') {
-      where.email = identifier;
-    } else {
-      where.user_id = identifier;
-    }
+
+    where.email = email;
 
     const user = await this.userRepository.findOne({ where });
 
@@ -178,25 +168,20 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // Only allow resend for inactive users
     if (user.status !== 'inactive') {
       throw new BadRequestException('User is already active');
     }
 
-    // Generate new OTP
     const verificationCode = this.generateSecureOtp();
     const hashedVerificationToken = await bcrypt.hash(verificationCode, 12);
 
-    // Update token
     user.hashed_email_verification_token = hashedVerificationToken;
     await this.userRepository.save(user);
 
-    // Determine context based on last action
     const context = user.account_type
       ? 'account-reactivation'
       : 'email-verification';
 
-    // Resend email
     await this.sendOtpEmail(user.email, verificationCode, context);
 
     return { success: true, message: 'OTP resent successfully' };
@@ -217,19 +202,15 @@ export class UserService {
     // Handle activation
     if (status === 'active') {
       user.status = 'active';
-      user.hashed_email_verification_token = null; // Clear OTP on activation
-    }
-    // Handle deactivation
-    else if (status === 'inactive') {
+      user.hashed_email_verification_token = null;
+    } else if (status === 'inactive') {
       user.status = 'inactive';
 
-      // Generate and send OTP only for new deactivations
       if (user.status !== 'inactive') {
         const verificationCode = this.generateSecureOtp();
         const hashedVerificationToken = await bcrypt.hash(verificationCode, 12);
         user.hashed_email_verification_token = hashedVerificationToken;
 
-        // Send reactivation OTP
         await this.sendOtpEmail(
           user.email,
           verificationCode,
@@ -242,27 +223,26 @@ export class UserService {
     return { success: true, data: updatedUser };
   }
 
-  async activateWithOtp(
-    activateDto: ActivateWithOtpDto,
-  ): Promise<{ success: boolean; data: User }> {
-    const { identifier, identifierType, code, token } = activateDto;
-
+  async activateWithOtp({
+    email,
+    code,
+    token,
+  }: {
+    email: string;
+    code?: string;
+    token?: string;
+  }): Promise<{ success: boolean; data: User }> {
     let user: User | null;
 
-    // Find user by token if provided
     if (token) {
       user = await this.userRepository.findOne({
         where: { hashed_email_verification_token: token },
       });
-    }
-    // Find user by identifier (email or user ID)
-    else {
+    } else {
       const where: FindOptionsWhere<User> = {};
-      if (identifierType === 'email') {
-        where.email = identifier;
-      } else {
-        where.user_id = identifier;
-      }
+
+      where.email = email;
+
       user = await this.userRepository.findOne({ where });
     }
 
@@ -270,14 +250,11 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // Verify using token
     if (token) {
       if (user.hashed_email_verification_token !== token) {
         throw new BadRequestException('Invalid verification token');
       }
-    }
-    // Verify using OTP code
-    else if (code) {
+    } else if (code) {
       if (!user.hashed_email_verification_token) {
         throw new BadRequestException('No verification token found');
       }
@@ -294,7 +271,6 @@ export class UserService {
       throw new BadRequestException('Either code or token must be provided');
     }
 
-    // Activate user and clear token
     user.status = 'active';
     user.hashed_email_verification_token = null;
     const activatedUser = await this.userRepository.save(user);
@@ -324,7 +300,7 @@ export class UserService {
     }
   }
 
-  generateSecureOtp(length = 6): string {
+  private generateSecureOtp(length = 6): string {
     const digits = '0123456789';
     let otp = '';
     let lastDigit: string | null = null;

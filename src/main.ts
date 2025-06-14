@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import * as basicAuth from 'express-basic-auth';
-// import { TimeoutInterceptor } from './timeout-intercepter';
+import { TimeoutInterceptor } from './timeout-intercepter';
 import { PrometheusController } from '@willsoto/nestjs-prometheus';
 
 async function bootstrap() {
@@ -16,7 +16,6 @@ async function bootstrap() {
   Reflect.defineMetadata('isPublic', true, PrometheusController);
   app.use(helmet());
 
-  // Enable CORS
   app.enableCors({
     origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
@@ -34,7 +33,7 @@ async function bootstrap() {
 
   const { httpAdapter } = app.get(HttpAdapterHost);
 
-  // app.useGlobalInterceptors(new TimeoutInterceptor(10000));
+  app.useGlobalInterceptors(new TimeoutInterceptor(10000));
 
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
 

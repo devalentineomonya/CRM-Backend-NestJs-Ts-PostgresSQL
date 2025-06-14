@@ -19,16 +19,16 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheInterceptor, CacheModule } from '@nestjs/cache-manager';
 import { SeedModule } from './seed/seed.module';
-// import { MetricsCronModule } from './crons/metrics-cron.module';
+import { MetricsCronModule } from './crons/metrics-cron.module';
 import { createKeyv, Keyv } from '@keyv/redis';
 import { CacheableMemory } from 'cacheable';
-// import { APP_INTERCEPTOR } from '@nestjs/core';
-import { TestController } from './cache.test.controller';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 
 @Module({
   imports: [
-    // MetricsCronModule,
+    MetricsCronModule,
     UsersModule,
     ProfileModule,
     QuotesModule,
@@ -39,14 +39,13 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
     AdminActivityLogsModule,
     DatabaseModule,
     AuthModule,
-
     CacheModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       isGlobal: true,
       useFactory: (configService: ConfigService) => {
         return {
-          ttl: 60,
+          ttl: 60000,
           stores: [
             new Keyv({
               store: new CacheableMemory({ ttl: 30000, lruSize: 5000 }),
@@ -69,11 +68,11 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
     SeedModule,
   ],
 
-  controllers: [WelcomeController, TestController],
+  controllers: [WelcomeController],
   providers: [
     ContactHelper,
     {
-      provide: 'APP_INTERCEPTOR',
+      provide: APP_INTERCEPTOR,
       useClass: CacheInterceptor,
     },
     {

@@ -96,6 +96,23 @@ export class UserController {
     return this.userService.updateEmail(userId, email);
   }
 
+  @Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Post('resend-otp')
+  async resendOtp(@Body() email: string) {
+    return this.userService.resendOtp(email);
+  }
+
+  @Roles(Role.FREE_USER, Role.PREMIUM_USER, Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Post('verify-with-otp')
+  async activateOtp(
+    @Body()
+    { email, code, token }: { email: string; code?: string; token?: string },
+  ) {
+    return this.userService.activateWithOtp({ email, code, token });
+  }
+
   @Roles(Role.SUPER_ADMIN)
   @ApiBearerAuth()
   @Delete(':id')

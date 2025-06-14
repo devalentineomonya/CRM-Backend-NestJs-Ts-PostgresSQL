@@ -1,0 +1,54 @@
+
+services:
+  - type: web
+    name: crm-backend
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    buildCommand: pnpm install && pnpm run build
+    startCommand: node dist/main
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: redis-cache
+          type: redis
+          property: connectionString
+
+  - type: background
+    name: prometheus-monitor
+    env: docker
+    plan: free
+    dockerfilePath: ./prometheus.Dockerfile
+    startCommand: "--config.file=/etc/prometheus/prometheus.yml"
+
+  - type: web
+    name: grafana-dashboard
+    env: docker
+    plan: free
+    dockerfilePath: ./grafana.Dockerfile
+    startCommand: "/run.sh"
+    envVars:
+      - key: GF_SECURITY_ADMIN_PASSWORD
+        value: admin123
+      - key: GF_SECURITY_ADMIN_USER
+        value: admin
+
+  - type: redis
+    name: redis-cache
+    plan: free
+
+
+# ------------------------------
+# databases
+# ------------------------------
+databases:
+  - name: crm-db
+    databaseName: crm_db
+    user: crm_user
+    plan: free
+
