@@ -1,9 +1,9 @@
+
 services:
   - type: web
     name: crm-backend
     env: docker
     dockerfilePath: ./Dockerfile.prod
-    startCommand: node dist/main
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -19,13 +19,11 @@ services:
     name: prometheus-monitor
     env: docker
     dockerfilePath: ./prometheus.Dockerfile
-    startCommand: "--config.file=/etc/prometheus/prometheus.yml"
 
   - type: web
     name: grafana-dashboard
     env: docker
     dockerfilePath: ./grafana.Dockerfile
-    startCommand: "/run.sh"
     envVars:
       - key: GF_SECURITY_ADMIN_PASSWORD
         value: admin123
@@ -35,9 +33,13 @@ services:
   - type: redis
     name: redis-cache
     plan: free
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: Allow public access (dev/test)
 
 databases:
   - name: crm-db
     databaseName: crm_db
     user: crm_user
     plan: free
+   plan: free
