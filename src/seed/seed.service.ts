@@ -46,9 +46,7 @@ export class SeedService {
         username: this.configService.get<string>('DATABASE_USER'),
         password: this.configService.get<string>('DATABASE_PASSWORD'),
         database: this.configService.get<string>('DATABASE_DB'),
-        ...(this.configService.get<string>('NODE_ENV') === 'production'
-          ? { ssl: true }
-          : {}),
+        ssl: this.configService.get<string>('NODE_ENV') !== 'development',
       };
 
       const workerResults = await Promise.allSettled([
