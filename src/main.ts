@@ -55,9 +55,10 @@ async function bootstrap() {
     .build();
 
   // Protect Swagger endpoints in non-development environments
-  // if (process.env.NODE_ENV !== 'development') {
-  const swaggerUser = configService.getOrThrow<string>('SWAGGER_USER');
-  const swaggerPass = configService.getOrThrow<string>('SWAGGER_PASS');
+  const swaggerUser =
+    configService.get<string>('SWAGGER_USER') || 'defaultUser';
+  const swaggerPass =
+    configService.get<string>('SWAGGER_PASS') || 'defaultPass';
 
   app.use(
     ['/api', '/api-json'],
@@ -67,7 +68,6 @@ async function bootstrap() {
       realm: 'Swagger Documentation',
     }),
   );
-  // }
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document, {
