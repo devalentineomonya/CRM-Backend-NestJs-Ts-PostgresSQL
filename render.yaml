@@ -1,4 +1,3 @@
-
 services:
   - type: web
     name: crm-backend
@@ -35,11 +34,11 @@ services:
     plan: free
     ipAllowList:
       - source: 0.0.0.0/0
-        description: Allow public access (dev/test)
+        description: Allow all (for dev)
 
 databases:
   - name: crm-db
     databaseName: crm_db
     user: crm_user
     plan: free
-   plan: free
+  plan: free
