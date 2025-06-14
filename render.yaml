@@ -1,4 +1,3 @@
-
 services:
   - type: web
     name: crm-backend
@@ -16,7 +15,7 @@ services:
           type: redis
           property: connectionString
 
-  - type: background
+  - type: worker
     name: prometheus-monitor
     env: docker
     dockerfilePath: ./prometheus.Dockerfile
@@ -42,4 +41,3 @@ databases:
     databaseName: crm_db
     user: crm_user
     plan: free
-
