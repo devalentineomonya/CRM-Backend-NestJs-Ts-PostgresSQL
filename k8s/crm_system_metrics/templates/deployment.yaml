@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: crm-system-metrics
   name: crm-system-metrics
+  labels:
+    app: crm_system_metrics
 spec:
   replicas: 1
   selector:
@@ -16,10 +16,31 @@ spec:
       annotations:
         prometheus.io/scrape: 'true'
         prometheus.io/path: /metrics
-        prometheus.io/port: '3000'
+        prometheus.io/port: '5000'
     spec:
       containers:
-        - image: crm-system
-          name: crm-system
+        - name: crm-system
+          image: crm-system
+          imagePullPolicy: Never
           ports:
             - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: crm-system-config
+            - secretRef:
+                name: crm-system-secret
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: crm-system-metrics-service
+  labels:
+    app: crm_system_metrics
+spec:
+  selector:
+    app: crm_system_metrics
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: ClusterIP

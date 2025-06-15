@@ -6,7 +6,8 @@
 /node_modules
 /.pnp
 .pnp.js
-
+k8s/crm_system_metrics/templates/secret.yaml
+k8s/crm_system_metrics/templates/config.yaml
 # testing
 /coverage
 

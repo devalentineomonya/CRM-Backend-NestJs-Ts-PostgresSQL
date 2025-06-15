@@ -8,11 +8,13 @@ export class LoggerMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction) {
     const startTime = Date.now();
-    const { method, path, headers, ip } = req;
+    const { method, headers, ip } = req;
+
+    const fullPath = req.originalUrl.split('?')[0]; // Strips query string
 
     this.logger.log({
       method,
-      path,
+      path: fullPath,
       userAgent: headers['user-agent'] || 'Unknown',
       ip,
     });

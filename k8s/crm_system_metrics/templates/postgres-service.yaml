@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: crm-database
+spec:
+  selector:
+    app: crm-database
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432

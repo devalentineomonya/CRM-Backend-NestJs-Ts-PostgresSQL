@@ -167,8 +167,8 @@ export class SeedService {
 
     const createUsers = async () => {
       const users: User[] = [];
-      const userBatchSize = 100;
-      const totalUsers = 10000;
+      const userBatchSize = 10;
+      const totalUsers = 10;
 
       for (let i = 0; i < totalUsers; i += userBatchSize) {
         const batch = Array.from(
@@ -202,8 +202,8 @@ export class SeedService {
 
     const createAdmins = async () => {
       const admins: Admin[] = [];
-      const adminBatchSize = 100;
-      const totalAdmins = 800;
+      const adminBatchSize = 8;
+      const totalAdmins = 8;
 
       for (let i = 0; i < totalAdmins; i += adminBatchSize) {
         const batch = Array.from(
@@ -347,12 +347,15 @@ export class SeedService {
     const workerId = `${entityType}-${Math.random().toString(36).substring(7)}`;
     this.logger.log(`Starting ${entityType} worker ${workerId}`);
 
-    return this.runWorker<T>(join(__dirname, `${entityType}.worker.js`), {
-      dbConfig,
-      workerId,
-      entityType,
-      userIds,
-      adminIds,
-    });
+    return this.runWorker<T>(
+      join(__dirname, 'workers', `${entityType}.worker.js`),
+      {
+        dbConfig,
+        workerId,
+        entityType,
+        userIds,
+        adminIds,
+      },
+    );
   }
 }

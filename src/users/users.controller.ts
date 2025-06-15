@@ -7,8 +7,6 @@ import {
   Param,
   Delete,
   Query,
-  UseInterceptors,
-  ClassSerializerInterceptor,
   Req,
 } from '@nestjs/common';
 import { UserService } from './users.service';
@@ -26,7 +24,6 @@ import { UpdateAccountTypeDto } from './dto/update-account-type.dto';
 import { UpdateUserStatusDto } from './dto/update-status.dto';
 import { UpdateEmailDto } from './dto/update-user-email.dto';
 
-@UseInterceptors(ClassSerializerInterceptor)
 @Controller('users')
 export class UserController {
   constructor(

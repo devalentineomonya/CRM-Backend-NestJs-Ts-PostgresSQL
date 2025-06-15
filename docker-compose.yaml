@@ -3,15 +3,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: crm-system:latest
     container_name: crm-system
     env_file: .env
     ports:
       - "5000:3000"
     depends_on:
-      crm_database:
+      crm-database:
         condition: service_healthy
 
-  crm_database:
+  crm-database:
     image: postgres:16-alpine
     container_name: crm-database
     restart: always
@@ -37,7 +38,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - crm_cache:/data
+      - crm-cache:/data
     networks:
       - app-network
 
@@ -45,10 +46,10 @@ services:
 
 volumes:
   crm_db:
-    name: crm_database
+    name: crm-database
     driver: local
-  crm_cache:
-    name: crm_cache
+  crm-cache:
+    name: crm-cache
     driver: local
 
 
