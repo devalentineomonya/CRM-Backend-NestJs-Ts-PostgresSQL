@@ -16,14 +16,14 @@ spec:
       annotations:
         prometheus.io/scrape: 'true'
         prometheus.io/path: /metrics
-        prometheus.io/port: '5000'
+        prometheus.io/port: '3000'
     spec:
       containers:
         - name: crm-system
           image: crm-system
           imagePullPolicy: Never
           ports:
-            - containerPort: 5000
+            - containerPort: 3000
           envFrom:
             - configMapRef:
                 name: crm-system-config

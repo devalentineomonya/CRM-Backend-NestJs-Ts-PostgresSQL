@@ -6,6 +6,7 @@ services:
     image: crm-system:latest
     container_name: crm-system
     env_file: .env
+    restart: unless_stopped
     ports:
       - "5000:3000"
     depends_on:

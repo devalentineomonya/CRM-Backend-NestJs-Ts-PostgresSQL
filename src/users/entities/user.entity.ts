@@ -34,7 +34,6 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: false })
   last_name: string;
 
-  @Index()
   @Column({ type: 'varchar', length: 255, unique: true, nullable: false })
   email: string;
 

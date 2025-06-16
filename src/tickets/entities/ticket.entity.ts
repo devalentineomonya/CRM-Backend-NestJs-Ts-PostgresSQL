@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { Admin } from 'src/admins/entities/admin.entity';
@@ -16,6 +17,7 @@ export class Ticket {
   @Column({ type: 'text', nullable: false })
   issue: string;
 
+  @Index()
   @Column({
     type: 'enum',
     enum: ['open', 'in-progress', 'closed'],
@@ -23,12 +25,15 @@ export class Ticket {
   })
   ticket_status: string;
 
+  @Index()
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_date: Date;
 
+  @Index()
   @Column({ type: 'timestamp', nullable: true })
   resolved_date: Date | null;
 
+  @Index()
   @Column({
     type: 'enum',
     enum: ['low', 'medium', 'high'],

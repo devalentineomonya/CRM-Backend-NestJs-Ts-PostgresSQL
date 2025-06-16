@@ -167,8 +167,8 @@ export class SeedService {
 
     const createUsers = async () => {
       const users: User[] = [];
-      const userBatchSize = 10;
-      const totalUsers = 10;
+      const userBatchSize = 100;
+      const totalUsers = 5500;
 
       for (let i = 0; i < totalUsers; i += userBatchSize) {
         const batch = Array.from(
@@ -202,8 +202,8 @@ export class SeedService {
 
     const createAdmins = async () => {
       const admins: Admin[] = [];
-      const adminBatchSize = 8;
-      const totalAdmins = 8;
+      const adminBatchSize = 100;
+      const totalAdmins = 5500;
 
       for (let i = 0; i < totalAdmins; i += adminBatchSize) {
         const batch = Array.from(

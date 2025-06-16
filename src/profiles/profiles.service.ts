@@ -6,6 +6,7 @@ import {
   Between,
   LessThanOrEqual,
   MoreThanOrEqual,
+  Raw,
 } from 'typeorm';
 import { Profile } from './entities/profile.entity';
 import { CreateProfileDto } from './dto/create-profile.dto';
@@ -46,10 +47,25 @@ export class ProfileService {
   ): Promise<{ success: boolean; count: number; data: Profile[] }> {
     const where: FindOptionsWhere<Profile> = {};
 
-    if (filter.city) where.city = filter.city;
-    if (filter.state) where.state = filter.state;
-    if (filter.country) where.country = filter.country;
-    if (filter.language) where.preferred_language = filter.language;
+    if (filter.city) {
+      where.city = Raw((alias) => `${alias} % :city`, { city: filter.city });
+    }
+
+    if (filter.state) {
+      where.state = Raw((alias) => `${alias} % :state`, {
+        state: filter.state,
+      });
+    }
+
+    if (filter.country) {
+      where.country = Raw((alias) => `${alias} % :country`, {
+        country: filter.country,
+      });
+    }
+
+    if (filter.language) {
+      where.preferred_language = filter.language;
+    }
 
     if (filter.age_min ?? filter.age_max) {
       const currentDate = new Date();

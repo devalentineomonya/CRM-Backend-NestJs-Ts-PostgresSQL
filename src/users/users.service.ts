@@ -133,7 +133,6 @@ export class UserService {
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
-
     if (user.email === updateEmailDto.email) {
       throw new BadRequestException(
         'New email must be different from current email',

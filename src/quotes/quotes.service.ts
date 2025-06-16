@@ -45,24 +45,31 @@ export class QuoteService {
   ): Promise<{ success: boolean; data: Quote[]; count: number }> {
     const { search, status, user_id, limit, page, sort_by, sort_order } =
       filter;
-    const skip = ((page ?? 1) - 1) * (limit ?? 10);
 
-    const where: FindOptionsWhere<Quote> | FindOptionsWhere<Quote>[] = {};
+    const take = Math.max(limit ?? 10, 1);
+    const skip = Math.max((page ?? 1) - 1, 0) * take;
 
-    if (status) where.status = status;
-    if (user_id) where.user = { user_id };
+    const where: FindOptionsWhere<Quote>[] = [];
+
+    const baseWhere: FindOptionsWhere<Quote> = {};
+    if (status) baseWhere.status = status;
+    if (user_id) baseWhere.user = { user_id };
 
     if (search) {
-      where.quote_details = ILike(`%${search}%`);
-      where.quote_type = ILike(`%${search}%`);
+      where.push(
+        { ...baseWhere, quote_details: ILike(`%${search}%`) },
+        { ...baseWhere, quote_type: ILike(`%${search}%`) },
+      );
+    } else {
+      where.push(baseWhere);
     }
 
     const [data, count] = await this.quoteRepository.findAndCount({
       where,
       relations: ['user'],
-      order: sort_by ? { [sort_by]: sort_order } : undefined,
+      order: sort_by ? { [sort_by]: sort_order } : { requested_date: 'DESC' },
       skip,
-      take: limit,
+      take,
     });
 
     return { success: true, data, count };

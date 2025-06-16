@@ -13,17 +13,10 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test,script}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:load": "artillery run artillery.config.yml",
-    "test:load:quick": "artillery quick --count 10 --num 5 http://localhost:3000",
-    "test:load:report": "artillery run artillery.config.yml --output artillery-report.json",
-    "test:load:html": "artillery run artillery.config.yml --output artillery-report.json && artillery report artillery-report.json",
-    "build:artillery": "tsc script/artillery.processor.ts --outDir dist --target es2020 --module commonjs --moduleResolution node --esModuleInterop true --allowSyntheticDefaultImports true",
-    "pretest:load": "npm run build:artillery"
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli",
+    "migration:create": "typeorm migration:create ./src/migrations/${MIGRATION_NAME}",
+    "migration:run": "npm run typeorm -- --dataSource=src/config/typeorm-cli.config.ts migration:run",
+    "migration:revert": "npm run typeorm -- --dataSource=src/config/typeorm-cli.config.ts migration:revert"
   },
   "dependencies": {
     "@faker-js/faker": "^9.8.0",
