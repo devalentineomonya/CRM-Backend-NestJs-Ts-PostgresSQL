@@ -18,7 +18,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         database: configService.get<string>('DATABASE_DB') || 'postgres',
         entities: [__dirname + '/../**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-        // ssl: configService.get<string>('NODE_ENV') !== 'development',
+        ssl: configService.get<string>('NODE_ENV') !== 'development',
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
         logging: configService.get<string>('NODE_ENV') !== 'production',
       }),

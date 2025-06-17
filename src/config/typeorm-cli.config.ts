@@ -22,7 +22,7 @@ export default new DataSource({
   username: configService.getOrThrow<string>('DATABASE_USER'),
   password: configService.getOrThrow<string>('DATABASE_PASSWORD'),
   database: configService.getOrThrow<string>('DATABASE_DB'),
-  // ssl: true,
+  ssl: configService.get<string>('NODE_ENV') !== 'development',
   logging: true,
   entities: [User, Admin, AdminActivityLog, Quote, Profile, UserVisit, Ticket],
   migrations: [AddTrigramIndexesAndSearch1750097414766],
